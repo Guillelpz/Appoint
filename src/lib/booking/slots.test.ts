@@ -29,4 +29,33 @@ describe('getAvailableSlots — huecos base', () => {
     expect(slots[14].start.toISOString()).toBe('2026-07-14T14:00:00.000Z'); // primero del tramo 2 (16:00 local)
     expect(slots[27].start.toISOString()).toBe('2026-07-14T17:15:00.000Z'); // último del tramo 2
   });
+
+  it('excluye los huecos que solapan con una ausencia (TimeOff) del empleado', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    await prisma.timeOff.create({
+      data: {
+        employeeId: seed.employees.marta.id,
+        start: new Date('2026-07-14T08:00:00.000Z'), // 10:00 local
+        end: new Date('2026-07-14T09:00:00.000Z'), // 11:00 local
+        reason: 'Cita médica',
+      },
+    });
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    // Se eliminan los 4 huecos del tramo 1 que solapan [08:00,09:00)Z: 08:00,08:15,08:30,08:45
+    expect(slots.length).toBe(24);
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T08:00:00.000Z')).toBe(false);
+    // El hueco que empieza justo cuando termina la ausencia sí está disponible
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T09:00:00.000Z')).toBe(true);
+  });
 });

@@ -1,12 +1,13 @@
 import type { PrismaClient } from '@prisma/client';
 import { addDaysToLocalDateString, localMinutesToUtc } from './timezone';
+import { rangesOverlap } from './overlap';
 
 export interface GetAvailableSlotsParams {
   businessId: string;
   serviceId: string;
   employeeId?: string;
-  dateFrom: string; // 'YYYY-MM-DD', fecha local del negocio (inclusive)
-  dateTo: string; // 'YYYY-MM-DD', fecha local del negocio (inclusive)
+  dateFrom: string;
+  dateTo: string;
   now?: Date;
 }
 
@@ -45,6 +46,13 @@ export async function getAvailableSlots(
   const service = await prisma.service.findUniqueOrThrow({ where: { id: serviceId } });
   const workingHours = await prisma.workingHours.findMany({ where: { employeeId } });
 
+  const rangeStartUtc = localMinutesToUtc(params.dateFrom, 0);
+  const rangeEndUtc = localMinutesToUtc(addDaysToLocalDateString(params.dateTo, 1), 0);
+
+  const timeOffs = await prisma.timeOff.findMany({
+    where: { employeeId, start: { lt: rangeEndUtc }, end: { gt: rangeStartUtc } },
+  });
+
   const slotDurationMinutes = service.durationMinutes + service.bufferAfterMinutes;
   const granularity = business.slotGranularityMinutes;
 
@@ -60,7 +68,13 @@ export async function getAvailableSlots(
       while (cursor + slotDurationMinutes <= block.endMinute) {
         const start = localMinutesToUtc(localDate, cursor);
         const end = localMinutesToUtc(localDate, cursor + slotDurationMinutes);
-        slots.push({ start, end, employeeId });
+
+        const blockedByTimeOff = timeOffs.some((t) => rangesOverlap(start, end, t.start, t.end));
+
+        if (!blockedByTimeOff) {
+          slots.push({ start, end, employeeId });
+        }
+
         cursor += granularity;
       }
     }
