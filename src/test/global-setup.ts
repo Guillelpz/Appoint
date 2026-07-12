@@ -8,7 +8,7 @@ export default async function globalSetup(): Promise<void> {
   }
 
   execSync('pnpm exec prisma migrate deploy', {
-    env: { ...process.env, DATABASE_URL: testDatabaseUrl },
+    env: { ...process.env, DATABASE_URL: testDatabaseUrl, DIRECT_URL: testDatabaseUrl },
     stdio: 'inherit',
   });
 }
