@@ -33,25 +33,24 @@ function localDateWeekday(localDateStr: string): number {
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
-export async function getAvailableSlots(
+async function getSlotsForEmployee(
   prisma: PrismaClient,
-  params: GetAvailableSlotsParams
-): Promise<AvailableSlot[]> {
-  const { businessId, serviceId, employeeId } = params;
-  const now = params.now ?? new Date();
-
-  if (!employeeId) {
-    throw new Error('employeeId es obligatorio en esta versión de getAvailableSlots');
+  params: {
+    employeeId: string;
+    slotDurationMinutes: number;
+    granularity: number;
+    dateFrom: string;
+    dateTo: string;
+    now: Date;
   }
+): Promise<AvailableSlot[]> {
+  const { employeeId, slotDurationMinutes, granularity, dateFrom, dateTo, now } = params;
 
-  const business = await prisma.business.findUniqueOrThrow({ where: { id: businessId } });
-  const service = await prisma.service.findUniqueOrThrow({ where: { id: serviceId } });
-  const workingHours = await prisma.workingHours.findMany({ where: { employeeId } });
+  const rangeStartUtc = localMinutesToUtc(dateFrom, 0);
+  const rangeEndUtc = localMinutesToUtc(addDaysToLocalDateString(dateTo, 1), 0);
 
-  const rangeStartUtc = localMinutesToUtc(params.dateFrom, 0);
-  const rangeEndUtc = localMinutesToUtc(addDaysToLocalDateString(params.dateTo, 1), 0);
-
-  const [timeOffs, activeAppointments] = await Promise.all([
+  const [workingHours, timeOffs, activeAppointments] = await Promise.all([
+    prisma.workingHours.findMany({ where: { employeeId } }),
     prisma.timeOff.findMany({
       where: { employeeId, start: { lt: rangeEndUtc }, end: { gt: rangeStartUtc } },
     }),
@@ -65,11 +64,8 @@ export async function getAvailableSlots(
     }),
   ]);
 
-  const slotDurationMinutes = service.durationMinutes + service.bufferAfterMinutes;
-  const granularity = business.slotGranularityMinutes;
-
+  const localDates = enumerateLocalDates(dateFrom, dateTo);
   const slots: AvailableSlot[] = [];
-  const localDates = enumerateLocalDates(params.dateFrom, params.dateTo);
 
   for (const localDate of localDates) {
     const weekday = localDateWeekday(localDate);
@@ -94,4 +90,53 @@ export async function getAvailableSlots(
   }
 
   return slots;
+}
+
+export async function getAvailableSlots(
+  prisma: PrismaClient,
+  params: GetAvailableSlotsParams
+): Promise<AvailableSlot[]> {
+  const now = params.now ?? new Date();
+  const business = await prisma.business.findUniqueOrThrow({ where: { id: params.businessId } });
+  const service = await prisma.service.findUniqueOrThrow({ where: { id: params.serviceId } });
+
+  let employeeIds: string[];
+  if (params.employeeId) {
+    employeeIds = [params.employeeId];
+  } else {
+    const serviceEmployees = await prisma.serviceEmployee.findMany({
+      where: { serviceId: params.serviceId, employee: { active: true } },
+      select: { employeeId: true },
+    });
+    employeeIds = serviceEmployees.map((se) => se.employeeId);
+  }
+
+  const slotDurationMinutes = service.durationMinutes + service.bufferAfterMinutes;
+  const granularity = business.slotGranularityMinutes;
+
+  const earliestAllowedStart = new Date(now.getTime() + business.minAdvanceNoticeMinutes * 60 * 1000);
+  const latestAllowedStart = new Date(now.getTime() + business.maxBookingWindowDays * 24 * 60 * 60 * 1000);
+
+  const slotsPerEmployee = await Promise.all(
+    employeeIds.map((employeeId) =>
+      getSlotsForEmployee(prisma, {
+        employeeId,
+        slotDurationMinutes,
+        granularity,
+        dateFrom: params.dateFrom,
+        dateTo: params.dateTo,
+        now,
+      })
+    )
+  );
+
+  const allSlots = slotsPerEmployee.flat();
+
+  const filtered = allSlots.filter(
+    (slot) => slot.start >= earliestAllowedStart && slot.start <= latestAllowedStart
+  );
+
+  filtered.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  return filtered;
 }

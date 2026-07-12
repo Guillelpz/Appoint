@@ -135,4 +135,66 @@ describe('getAvailableSlots — huecos base', () => {
     expect(slots.some((s) => s.start.toISOString() === '2026-07-14T15:00:00.000Z')).toBe(false); // PENDING activa
     expect(slots.some((s) => s.start.toISOString() === '2026-07-14T16:00:00.000Z')).toBe(true); // PENDING caducada, se ignora
   });
+
+  it('excluye huecos anteriores a la antelación mínima del negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    // minAdvanceNoticeMinutes del seed = 60. "now" está a las 07:30Z del propio martes de prueba.
+    const now = new Date('2026-07-14T07:30:00.000Z');
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    // earliestAllowedStart = 08:30Z; el hueco de 08:00Z queda excluido, el de 08:15Z también
+    // (empieza antes de 08:30Z), el de 08:30 en adelante se mantiene.
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T08:00:00.000Z')).toBe(false);
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T08:15:00.000Z')).toBe(false);
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T08:30:00.000Z')).toBe(true);
+  });
+
+  it('excluye huecos más allá de la ventana máxima de reserva del negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    // maxBookingWindowDays del seed = 30. "now" es tal que 2026-07-14 queda 31 días en el futuro.
+    const now = new Date('2026-06-13T08:00:00.000Z');
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    expect(slots.length).toBe(0);
+  });
+
+  it('con "cualquier profesional" (sin employeeId) combina los huecos de todos los empleados cualificados', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id, // Marta y Carlos están cualificados
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    const martaSlots = slots.filter((s) => s.employeeId === seed.employees.marta.id);
+    const carlosSlots = slots.filter((s) => s.employeeId === seed.employees.carlos.id);
+
+    expect(martaSlots.length).toBe(28); // dos tramos, como en la Tarea 9
+    expect(carlosSlots.length).toBe(14); // Carlos solo trabaja el tramo de tarde
+    expect(slots.length).toBe(42);
+    // Los huecos están ordenados cronológicamente
+    for (let i = 1; i < slots.length; i++) {
+      expect(slots[i].start.getTime()).toBeGreaterThanOrEqual(slots[i - 1].start.getTime());
+    }
+  });
 });
