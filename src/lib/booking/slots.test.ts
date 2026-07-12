@@ -58,4 +58,81 @@ describe('getAvailableSlots — huecos base', () => {
     // El hueco que empieza justo cuando termina la ausencia sí está disponible
     expect(slots.some((s) => s.start.toISOString() === '2026-07-14T09:00:00.000Z')).toBe(true);
   });
+
+  it('excluye citas CONFIRMED y PENDING no caducadas, pero ignora las PENDING caducadas (expiración perezosa)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-14T13:00:00.000Z'); // 15:00 local, mismo día de prueba
+
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente de prueba',
+        phone: '+34611000000',
+        email: 'cliente-fixture@example.com',
+      },
+    });
+
+    // Cita CONFIRMED que bloquea el primer hueco del tramo de tarde (16:00 local = 14:00Z)
+    await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        start: new Date('2026-07-14T14:00:00.000Z'),
+        end: new Date('2026-07-14T14:35:00.000Z'),
+        status: 'CONFIRMED',
+      },
+    });
+
+    // Cita PENDING creada hace 5 minutos (no caducada): bloquea el hueco de 15:00Z
+    await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        start: new Date('2026-07-14T15:00:00.000Z'),
+        end: new Date('2026-07-14T15:35:00.000Z'),
+        status: 'PENDING',
+        createdAt: new Date('2026-07-14T12:55:00.000Z'), // now - 5 min
+      },
+    });
+
+    // Cita PENDING creada hace 40 minutos (caducada): NO debe bloquear el hueco de 16:00Z
+    await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        start: new Date('2026-07-14T16:00:00.000Z'),
+        end: new Date('2026-07-14T16:35:00.000Z'),
+        status: 'PENDING',
+        createdAt: new Date('2026-07-14T12:20:00.000Z'), // now - 40 min
+      },
+    });
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T14:00:00.000Z')).toBe(false); // CONFIRMED
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T15:00:00.000Z')).toBe(false); // PENDING activa
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T16:00:00.000Z')).toBe(true); // PENDING caducada, se ignora
+  });
 });

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { addDaysToLocalDateString, localMinutesToUtc } from './timezone';
 import { rangesOverlap } from './overlap';
+import { activeAppointmentWhere } from './active-appointments';
 
 export interface GetAvailableSlotsParams {
   businessId: string;
@@ -37,6 +38,7 @@ export async function getAvailableSlots(
   params: GetAvailableSlotsParams
 ): Promise<AvailableSlot[]> {
   const { businessId, serviceId, employeeId } = params;
+  const now = params.now ?? new Date();
 
   if (!employeeId) {
     throw new Error('employeeId es obligatorio en esta versión de getAvailableSlots');
@@ -49,9 +51,19 @@ export async function getAvailableSlots(
   const rangeStartUtc = localMinutesToUtc(params.dateFrom, 0);
   const rangeEndUtc = localMinutesToUtc(addDaysToLocalDateString(params.dateTo, 1), 0);
 
-  const timeOffs = await prisma.timeOff.findMany({
-    where: { employeeId, start: { lt: rangeEndUtc }, end: { gt: rangeStartUtc } },
-  });
+  const [timeOffs, activeAppointments] = await Promise.all([
+    prisma.timeOff.findMany({
+      where: { employeeId, start: { lt: rangeEndUtc }, end: { gt: rangeStartUtc } },
+    }),
+    prisma.appointment.findMany({
+      where: {
+        employeeId,
+        start: { lt: rangeEndUtc },
+        end: { gt: rangeStartUtc },
+        ...activeAppointmentWhere(now),
+      },
+    }),
+  ]);
 
   const slotDurationMinutes = service.durationMinutes + service.bufferAfterMinutes;
   const granularity = business.slotGranularityMinutes;
@@ -70,8 +82,9 @@ export async function getAvailableSlots(
         const end = localMinutesToUtc(localDate, cursor + slotDurationMinutes);
 
         const blockedByTimeOff = timeOffs.some((t) => rangesOverlap(start, end, t.start, t.end));
+        const blockedByAppointment = activeAppointments.some((a) => rangesOverlap(start, end, a.start, a.end));
 
-        if (!blockedByTimeOff) {
+        if (!blockedByTimeOff && !blockedByAppointment) {
           slots.push({ start, end, employeeId });
         }
 
