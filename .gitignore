@@ -1,0 +1,19 @@
+# Dependencias y builds
+node_modules/
+.next/
+out/
+dist/
+coverage/
+
+# Entorno y secretos
+.env
+.env*.local
+
+# Herramientas
+.superpowers/
+.vercel/
+*.tsbuildinfo
+
+# SO / editor
+.DS_Store
+Thumbs.db
