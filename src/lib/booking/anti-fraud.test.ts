@@ -80,6 +80,7 @@ describe('checkActiveAppointmentLimit', () => {
           start: new Date('2026-07-14T14:00:00.000Z'),
           end: new Date('2026-07-14T14:35:00.000Z'),
           status: 'PENDING',
+          createdAt: new Date(now.getTime() - 5 * 60 * 1000),
         },
       ],
     });

@@ -21,7 +21,7 @@ export async function checkActiveAppointmentLimit(
       businessId: params.businessId,
       AND: [
         { OR: [{ customerPhone: params.phone }, { customerEmail: params.email }] },
-        activeAppointmentWhere(new Date()),
+        activeAppointmentWhere(now),
       ],
     },
   });
