@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
-import { checkActiveAppointmentLimit } from './anti-fraud';
+import { checkActiveAppointmentLimit, checkNoOverlapForCustomer } from './anti-fraud';
 
 describe('checkActiveAppointmentLimit', () => {
   it('permite reservar si el cliente tiene menos de 2 citas activas', async () => {
@@ -89,6 +89,88 @@ describe('checkActiveAppointmentLimit', () => {
       businessId: seed.business.id,
       phone: customer.phone,
       email: customer.email,
+      now,
+    });
+
+    expect(allowed).toBe(false);
+  });
+});
+
+describe('checkNoOverlapForCustomer', () => {
+  it('permite reservar si el nuevo horario no solapa con otra cita activa del mismo cliente', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente solape',
+        phone: '+34644000000',
+        email: 'cliente-solape@example.com',
+      },
+    });
+
+    await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        start: new Date('2026-07-14T08:00:00.000Z'),
+        end: new Date('2026-07-14T08:35:00.000Z'),
+        status: 'CONFIRMED',
+      },
+    });
+
+    const allowed = await checkNoOverlapForCustomer(prisma, {
+      businessId: seed.business.id,
+      phone: customer.phone,
+      email: customer.email,
+      start: new Date('2026-07-14T14:00:00.000Z'),
+      end: new Date('2026-07-14T14:35:00.000Z'),
+      now,
+    });
+
+    expect(allowed).toBe(true);
+  });
+
+  it('bloquea la reserva si el nuevo horario solapa con otra cita activa del mismo cliente', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente solape',
+        phone: '+34644000001',
+        email: 'cliente-solape-2@example.com',
+      },
+    });
+
+    await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        start: new Date('2026-07-14T08:00:00.000Z'),
+        end: new Date('2026-07-14T08:35:00.000Z'),
+        status: 'CONFIRMED',
+      },
+    });
+
+    const allowed = await checkNoOverlapForCustomer(prisma, {
+      businessId: seed.business.id,
+      phone: customer.phone,
+      email: customer.email,
+      start: new Date('2026-07-14T08:20:00.000Z'), // solapa con 08:00-08:35
+      end: new Date('2026-07-14T08:55:00.000Z'),
       now,
     });
 
