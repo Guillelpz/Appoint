@@ -110,5 +110,9 @@ export async function checkRateLimit(prisma: PrismaClient, params: CheckRateLimi
     },
   });
 
-  return count < maxAttemptsPerHour;
+  // recordBookingAttempt inserta el intento actual antes de llamar a esta
+  // función, así que `count` ya incluye el propio intento en curso: permitir
+  // hasta maxAttemptsPerHour (el 5º pasa) y bloquear solo a partir del
+  // siguiente (el 6º).
+  return count <= maxAttemptsPerHour;
 }

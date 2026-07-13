@@ -242,10 +242,12 @@ describe('checkRateLimit', () => {
     expect(allowed).toBe(true);
   });
 
-  it('bloquea el intento al llegar a 5 registrados en la última hora para esa IP', async () => {
+  it('permite el intento al llegar exactamente a 5 registrados en la última hora (el 5º intento pasa)', async () => {
     const seed = await seedDemoBusiness(prisma);
     const now = new Date('2026-07-13T10:00:00.000Z');
 
+    // recordBookingAttempt inserta antes de contar, así que en el flujo real
+    // estos 5 registros incluyen el propio intento actual: el 5º debe pasar.
     for (let i = 0; i < 5; i++) {
       await prisma.bookingAttempt.create({
         data: {
@@ -259,6 +261,29 @@ describe('checkRateLimit', () => {
     const allowed = await checkRateLimit(prisma, {
       businessId: seed.business.id,
       ipAddress: '203.0.113.11',
+      now,
+    });
+
+    expect(allowed).toBe(true);
+  });
+
+  it('bloquea el intento al llegar a 6 registrados en la última hora para esa IP (el 6º intento no pasa)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T10:00:00.000Z');
+
+    for (let i = 0; i < 6; i++) {
+      await prisma.bookingAttempt.create({
+        data: {
+          businessId: seed.business.id,
+          ipAddress: '203.0.113.14',
+          createdAt: new Date(now.getTime() - i * 60 * 1000),
+        },
+      });
+    }
+
+    const allowed = await checkRateLimit(prisma, {
+      businessId: seed.business.id,
+      ipAddress: '203.0.113.14',
       now,
     });
 
