@@ -58,3 +58,20 @@ export async function checkNoOverlapForCustomer(
 
   return overlapping === null;
 }
+
+export interface CheckBlacklistParams {
+  businessId: string;
+  phone: string;
+  email: string;
+}
+
+export async function checkBlacklist(prisma: PrismaClient, params: CheckBlacklistParams): Promise<boolean> {
+  const entry = await prisma.blacklistEntry.findFirst({
+    where: {
+      businessId: params.businessId,
+      OR: [{ phone: params.phone }, { email: params.email }],
+    },
+  });
+
+  return entry === null;
+}

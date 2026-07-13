@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
-import { checkActiveAppointmentLimit, checkNoOverlapForCustomer } from './anti-fraud';
+import { checkActiveAppointmentLimit, checkNoOverlapForCustomer, checkBlacklist } from './anti-fraud';
 
 describe('checkActiveAppointmentLimit', () => {
   it('permite reservar si el cliente tiene menos de 2 citas activas', async () => {
@@ -172,6 +172,40 @@ describe('checkNoOverlapForCustomer', () => {
       start: new Date('2026-07-14T08:20:00.000Z'), // solapa con 08:00-08:35
       end: new Date('2026-07-14T08:55:00.000Z'),
       now,
+    });
+
+    expect(allowed).toBe(false);
+  });
+});
+
+describe('checkBlacklist', () => {
+  it('permite reservar si el cliente no está en la lista negra', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const allowed = await checkBlacklist(prisma, {
+      businessId: seed.business.id,
+      phone: '+34655000000',
+      email: 'cliente-limpio@example.com',
+    });
+
+    expect(allowed).toBe(true);
+  });
+
+  it('bloquea la reserva si el teléfono o el email están en la lista negra del negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    await prisma.blacklistEntry.create({
+      data: {
+        businessId: seed.business.id,
+        phone: '+34655000001',
+        reason: 'Faltas repetidas sin avisar',
+      },
+    });
+
+    const allowed = await checkBlacklist(prisma, {
+      businessId: seed.business.id,
+      phone: '+34655000001',
+      email: 'otro-email@example.com',
     });
 
     expect(allowed).toBe(false);
