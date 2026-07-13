@@ -31,7 +31,8 @@ export type CreateAppointmentFailureReason =
   | 'CUSTOMER_OVERLAP'
   | 'EMPLOYEE_UNAVAILABLE'
   | 'NO_EMPLOYEE_AVAILABLE'
-  | 'SLOT_TAKEN';
+  | 'SLOT_TAKEN'
+  | 'CUSTOMER_CONFLICT';
 
 export type CreateAppointmentResult =
   | { ok: true; appointment: Appointment }
@@ -182,8 +183,50 @@ export async function createAppointment(
     return { ok: true, appointment };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return { ok: false, reason: 'SLOT_TAKEN' };
+      const reason = classifyUniqueViolation(error);
+      if (reason) {
+        return { ok: false, reason };
+      }
     }
     throw error;
   }
+}
+
+// Distingue qué restricción única disparó el P2002 dentro de la transacción.
+// Comprobado empíricamente (Prisma 6.19 + PostgreSQL):
+// - Índice único parcial Appointment_employeeId_start_active_key:
+//     meta = { modelName: 'Appointment', target: ['employeeId', 'start'] }
+// - Customer businessId_phone: meta = { modelName: 'Customer', target: ['businessId', 'phone'] }
+// - Customer businessId_email: meta = { modelName: 'Customer', target: ['businessId', 'email'] }
+// Se acepta también target como string (nombre de constraint) por robustez
+// ante variaciones del motor. Cualquier otro P2002 (p. ej. colisión
+// astronómicamente improbable de confirmToken/cancelToken) devuelve null y
+// el llamador relanza el error: no debe enmascararse como fallo de negocio.
+function classifyUniqueViolation(
+  error: Prisma.PrismaClientKnownRequestError
+): Extract<CreateAppointmentFailureReason, 'SLOT_TAKEN' | 'CUSTOMER_CONFLICT'> | null {
+  const meta = error.meta as { modelName?: unknown; target?: unknown } | undefined;
+  const rawTarget = meta?.target;
+  const targets = Array.isArray(rawTarget)
+    ? rawTarget.map(String)
+    : typeof rawTarget === 'string'
+      ? [rawTarget]
+      : [];
+
+  const matchesSlotIndex =
+    (targets.includes('employeeId') && targets.includes('start')) ||
+    targets.some((t) => t.includes('employeeId_start'));
+  if (matchesSlotIndex) {
+    return 'SLOT_TAKEN';
+  }
+
+  const matchesCustomerIdentity =
+    meta?.modelName === 'Customer' ||
+    (targets.includes('businessId') && (targets.includes('phone') || targets.includes('email'))) ||
+    targets.some((t) => t.includes('businessId_phone') || t.includes('businessId_email'));
+  if (matchesCustomerIdentity) {
+    return 'CUSTOMER_CONFLICT';
+  }
+
+  return null;
 }

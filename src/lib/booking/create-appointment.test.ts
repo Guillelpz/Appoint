@@ -279,6 +279,44 @@ describe('createAppointment', () => {
     }
   });
 
+  it('rechaza con CUSTOMER_CONFLICT si el teléfono ya pertenece a otro cliente del negocio (sin falso SLOT_TAKEN)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    // Cliente existente con teléfono X y email A.
+    await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente original',
+        phone: '+34666000013',
+        email: 'original@example.com',
+      },
+    });
+
+    // Nueva reserva con el mismo teléfono X pero email B: el upsert por
+    // businessId_email no encuentra al cliente y su create viola la
+    // restricción única Customer businessId_phone. No debe etiquetarse
+    // como SLOT_TAKEN: el hueco está realmente libre.
+    const result = await createAppointment(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente conflicto',
+      customerPhone: '+34666000013',
+      customerEmail: 'otro-email@example.com',
+      source: 'WEB',
+      ipAddress: '198.51.100.11',
+      now: NOW,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'CUSTOMER_CONFLICT' });
+
+    const appointmentCount = await prisma.appointment.count({
+      where: { businessId: seed.business.id },
+    });
+    expect(appointmentCount).toBe(0);
+  });
+
   it('libera una PENDING caducada que ocupa el mismo hueco exacto y crea la nueva cita (sin falso SLOT_TAKEN)', async () => {
     const seed = await seedDemoBusiness(prisma);
 
