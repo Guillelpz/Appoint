@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
-import { checkActiveAppointmentLimit, checkNoOverlapForCustomer, checkBlacklist } from './anti-fraud';
+import {
+  checkActiveAppointmentLimit,
+  checkNoOverlapForCustomer,
+  checkBlacklist,
+  checkRateLimit,
+  recordBookingAttempt,
+} from './anti-fraud';
 
 describe('checkActiveAppointmentLimit', () => {
   it('permite reservar si el cliente tiene menos de 2 citas activas', async () => {
@@ -209,5 +215,88 @@ describe('checkBlacklist', () => {
     });
 
     expect(allowed).toBe(false);
+  });
+});
+
+describe('checkRateLimit', () => {
+  it('permite el intento si hay menos de 5 registrados en la última hora para esa IP', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T10:00:00.000Z');
+
+    for (let i = 0; i < 4; i++) {
+      await prisma.bookingAttempt.create({
+        data: {
+          businessId: seed.business.id,
+          ipAddress: '203.0.113.10',
+          createdAt: new Date(now.getTime() - i * 60 * 1000),
+        },
+      });
+    }
+
+    const allowed = await checkRateLimit(prisma, {
+      businessId: seed.business.id,
+      ipAddress: '203.0.113.10',
+      now,
+    });
+
+    expect(allowed).toBe(true);
+  });
+
+  it('bloquea el intento al llegar a 5 registrados en la última hora para esa IP', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T10:00:00.000Z');
+
+    for (let i = 0; i < 5; i++) {
+      await prisma.bookingAttempt.create({
+        data: {
+          businessId: seed.business.id,
+          ipAddress: '203.0.113.11',
+          createdAt: new Date(now.getTime() - i * 60 * 1000),
+        },
+      });
+    }
+
+    const allowed = await checkRateLimit(prisma, {
+      businessId: seed.business.id,
+      ipAddress: '203.0.113.11',
+      now,
+    });
+
+    expect(allowed).toBe(false);
+  });
+
+  it('ignora intentos de hace más de una hora', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T10:00:00.000Z');
+
+    for (let i = 0; i < 5; i++) {
+      await prisma.bookingAttempt.create({
+        data: {
+          businessId: seed.business.id,
+          ipAddress: '203.0.113.12',
+          createdAt: new Date(now.getTime() - 90 * 60 * 1000), // hace 90 minutos
+        },
+      });
+    }
+
+    const allowed = await checkRateLimit(prisma, {
+      businessId: seed.business.id,
+      ipAddress: '203.0.113.12',
+      now,
+    });
+
+    expect(allowed).toBe(true);
+  });
+
+  it('recordBookingAttempt persiste un nuevo intento', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    await recordBookingAttempt(prisma, { businessId: seed.business.id, ipAddress: '203.0.113.13' });
+
+    const count = await prisma.bookingAttempt.count({
+      where: { businessId: seed.business.id, ipAddress: '203.0.113.13' },
+    });
+
+    expect(count).toBe(1);
   });
 });

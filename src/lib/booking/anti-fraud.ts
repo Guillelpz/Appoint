@@ -75,3 +75,40 @@ export async function checkBlacklist(prisma: PrismaClient, params: CheckBlacklis
 
   return entry === null;
 }
+
+export interface RecordBookingAttemptParams {
+  businessId: string;
+  ipAddress: string;
+}
+
+export async function recordBookingAttempt(
+  prisma: PrismaClient,
+  params: RecordBookingAttemptParams
+): Promise<void> {
+  await prisma.bookingAttempt.create({
+    data: { businessId: params.businessId, ipAddress: params.ipAddress },
+  });
+}
+
+export interface CheckRateLimitParams {
+  businessId: string;
+  ipAddress: string;
+  now?: Date;
+  maxAttemptsPerHour?: number;
+}
+
+export async function checkRateLimit(prisma: PrismaClient, params: CheckRateLimitParams): Promise<boolean> {
+  const now = params.now ?? new Date();
+  const maxAttemptsPerHour = params.maxAttemptsPerHour ?? 5;
+  const windowStart = new Date(now.getTime() - 60 * 60 * 1000);
+
+  const count = await prisma.bookingAttempt.count({
+    where: {
+      businessId: params.businessId,
+      ipAddress: params.ipAddress,
+      createdAt: { gt: windowStart },
+    },
+  });
+
+  return count < maxAttemptsPerHour;
+}
