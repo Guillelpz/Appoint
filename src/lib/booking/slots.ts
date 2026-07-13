@@ -97,11 +97,26 @@ export async function getAvailableSlots(
   params: GetAvailableSlotsParams
 ): Promise<AvailableSlot[]> {
   const now = params.now ?? new Date();
-  const business = await prisma.business.findUniqueOrThrow({ where: { id: params.businessId } });
-  const service = await prisma.service.findUniqueOrThrow({ where: { id: params.serviceId } });
+  const business = await prisma.business.findUnique({ where: { id: params.businessId } });
+  if (!business) {
+    return [];
+  }
+  const service = await prisma.service.findUnique({ where: { id: params.serviceId } });
+  if (!service || service.businessId !== params.businessId) {
+    return [];
+  }
 
   let employeeIds: string[];
   if (params.employeeId) {
+    const [serviceEmployee, employee] = await Promise.all([
+      prisma.serviceEmployee.findUnique({
+        where: { serviceId_employeeId: { serviceId: params.serviceId, employeeId: params.employeeId } },
+      }),
+      prisma.employee.findUnique({ where: { id: params.employeeId } }),
+    ]);
+    if (!serviceEmployee || !employee || !employee.active || employee.businessId !== params.businessId) {
+      return [];
+    }
     employeeIds = [params.employeeId];
   } else {
     const serviceEmployees = await prisma.serviceEmployee.findMany({

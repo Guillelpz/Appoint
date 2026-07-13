@@ -197,4 +197,127 @@ describe('getAvailableSlots — huecos base', () => {
       expect(slots[i].start.getTime()).toBeGreaterThanOrEqual(slots[i - 1].start.getTime());
     }
   });
+
+  it('devuelve una lista vacía si el businessId no existe', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: 'negocio-inexistente',
+      serviceId: seed.services.corteHombre.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    expect(slots).toEqual([]);
+  });
+
+  it('devuelve una lista vacía si el serviceId no existe o pertenece a otro negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    const otherBusiness = await prisma.business.create({
+      data: { slug: 'otro-negocio-slots', name: 'Otro Negocio', type: 'OTHER' },
+    });
+    const otherService = await prisma.service.create({
+      data: { businessId: otherBusiness.id, name: 'Servicio ajeno', durationMinutes: 30, priceCents: 1000 },
+    });
+
+    const slotsServicioInexistente = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: 'servicio-inexistente',
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+    expect(slotsServicioInexistente).toEqual([]);
+
+    const slotsServicioAjeno = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: otherService.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+    expect(slotsServicioAjeno).toEqual([]);
+  });
+
+  it('devuelve una lista vacía si el employeeId explícito no presta ese servicio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    // La coloración solo la presta Marta, no Carlos.
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.coloracion.id,
+      employeeId: seed.employees.carlos.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    expect(slots).toEqual([]);
+  });
+
+  it('devuelve una lista vacía si el employeeId explícito está inactivo', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    await prisma.employee.update({ where: { id: seed.employees.marta.id }, data: { active: false } });
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    expect(slots).toEqual([]);
+  });
+
+  it('una PENDING con createdAt exactamente en el límite de 30 minutos no bloquea el hueco (frontera de caducidad)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-14T13:00:00.000Z'); // 15:00 local
+
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente frontera',
+        phone: '+34611000099',
+        email: 'frontera@example.com',
+      },
+    });
+
+    // createdAt exactamente now - 30min: en el límite exacto de caducidad,
+    // por convención de activeAppointmentWhere (gt estricto) ya está caducada.
+    await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        start: new Date('2026-07-14T16:00:00.000Z'),
+        end: new Date('2026-07-14T16:35:00.000Z'),
+        status: 'PENDING',
+        createdAt: new Date(now.getTime() - 30 * 60 * 1000),
+      },
+    });
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T16:00:00.000Z')).toBe(true);
+  });
 });

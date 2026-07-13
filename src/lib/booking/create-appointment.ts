@@ -25,6 +25,8 @@ export interface CreateAppointmentInput {
 }
 
 export type CreateAppointmentFailureReason =
+  | 'BUSINESS_NOT_FOUND'
+  | 'SERVICE_NOT_FOUND'
   | 'RATE_LIMITED'
   | 'BLACKLISTED'
   | 'CUSTOMER_LIMIT_REACHED'
@@ -61,6 +63,15 @@ export async function createAppointment(
 ): Promise<CreateAppointmentResult> {
   const now = input.now ?? new Date();
 
+  const business = await prisma.business.findUnique({ where: { id: input.businessId } });
+  if (!business) {
+    return { ok: false, reason: 'BUSINESS_NOT_FOUND' };
+  }
+
+  // Se registra el intento solo una vez comprobado que el negocio existe
+  // (evita un P2003 crudo por la FK de BookingAttempt.businessId), pero
+  // antes del resto de comprobaciones, para que los intentos rechazados
+  // sigan contando de cara al límite de tasa.
   await recordBookingAttempt(prisma, { businessId: input.businessId, ipAddress: input.ipAddress });
 
   const withinRateLimit = await checkRateLimit(prisma, {
@@ -91,7 +102,10 @@ export async function createAppointment(
     return { ok: false, reason: 'CUSTOMER_LIMIT_REACHED' };
   }
 
-  const service = await prisma.service.findUniqueOrThrow({ where: { id: input.serviceId } });
+  const service = await prisma.service.findUnique({ where: { id: input.serviceId } });
+  if (!service || service.businessId !== input.businessId) {
+    return { ok: false, reason: 'SERVICE_NOT_FOUND' };
+  }
   const end = new Date(input.start.getTime() + (service.durationMinutes + service.bufferAfterMinutes) * 60 * 1000);
 
   const noOverlap = await checkNoOverlapForCustomer(prisma, {
@@ -108,6 +122,16 @@ export async function createAppointment(
 
   let employeeId: string;
   if (input.employeeId) {
+    const [serviceEmployee, employee] = await Promise.all([
+      prisma.serviceEmployee.findUnique({
+        where: { serviceId_employeeId: { serviceId: input.serviceId, employeeId: input.employeeId } },
+      }),
+      prisma.employee.findUnique({ where: { id: input.employeeId } }),
+    ]);
+    if (!serviceEmployee || !employee || !employee.active || employee.businessId !== input.businessId) {
+      return { ok: false, reason: 'EMPLOYEE_UNAVAILABLE' };
+    }
+
     const available = await isEmployeeAvailableAt(prisma, {
       businessId: input.businessId,
       serviceId: input.serviceId,

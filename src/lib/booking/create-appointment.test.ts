@@ -371,4 +371,105 @@ describe('createAppointment', () => {
     });
     expect(refreshedStale.status).toBe('CANCELLED');
   });
+
+  it('rechaza con BUSINESS_NOT_FOUND si el negocio no existe', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await createAppointment(prisma, {
+      businessId: 'negocio-inexistente',
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Sin negocio',
+      customerPhone: '+34666000100',
+      customerEmail: 'sinnegocio@example.com',
+      source: 'WEB',
+      ipAddress: '198.51.100.100',
+      now: NOW,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'BUSINESS_NOT_FOUND' });
+
+    const appointmentCount = await prisma.appointment.count();
+    expect(appointmentCount).toBe(0);
+  });
+
+  it('rechaza con SERVICE_NOT_FOUND si el serviceId pertenece a otro negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const otherBusiness = await prisma.business.create({
+      data: { slug: 'otro-negocio-create', name: 'Otro Negocio', type: 'OTHER' },
+    });
+    const otherService = await prisma.service.create({
+      data: { businessId: otherBusiness.id, name: 'Servicio ajeno', durationMinutes: 30, priceCents: 1000 },
+    });
+
+    const result = await createAppointment(prisma, {
+      businessId: seed.business.id,
+      serviceId: otherService.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Servicio ajeno',
+      customerPhone: '+34666000101',
+      customerEmail: 'servicioajeno@example.com',
+      source: 'WEB',
+      ipAddress: '198.51.100.101',
+      now: NOW,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'SERVICE_NOT_FOUND' });
+
+    const appointmentCount = await prisma.appointment.count({ where: { businessId: seed.business.id } });
+    expect(appointmentCount).toBe(0);
+  });
+
+  it('rechaza con EMPLOYEE_UNAVAILABLE si el empleado indicado no presta ese servicio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    // 16:00 local (dentro del horario de tarde de Carlos), para que el hueco
+    // esté realmente libre por agenda: lo único que debe bloquearlo es que
+    // Carlos no presta coloración (comprueba el gap de F1, no una simple
+    // colisión de horario).
+    const carlosWorkingStart = new Date('2026-07-14T14:00:00.000Z');
+
+    // La coloración solo la presta Marta, no Carlos.
+    const result = await createAppointment(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.coloracion.id,
+      employeeId: seed.employees.carlos.id,
+      start: carlosWorkingStart,
+      customerName: 'Empleado sin servicio',
+      customerPhone: '+34666000102',
+      customerEmail: 'sinservicio@example.com',
+      source: 'WEB',
+      ipAddress: '198.51.100.102',
+      now: NOW,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
+
+    const appointmentCount = await prisma.appointment.count({ where: { businessId: seed.business.id } });
+    expect(appointmentCount).toBe(0);
+  });
+
+  it('rechaza con EMPLOYEE_UNAVAILABLE si el empleado indicado está inactivo', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.employee.update({ where: { id: seed.employees.marta.id }, data: { active: false } });
+
+    const result = await createAppointment(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Empleado inactivo',
+      customerPhone: '+34666000103',
+      customerEmail: 'inactivo@example.com',
+      source: 'WEB',
+      ipAddress: '198.51.100.103',
+      now: NOW,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
+
+    const appointmentCount = await prisma.appointment.count({ where: { businessId: seed.business.id } });
+    expect(appointmentCount).toBe(0);
+  });
 });
