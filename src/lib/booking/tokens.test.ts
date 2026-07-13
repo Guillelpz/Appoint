@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
 import { createAppointment } from './create-appointment';
-import { confirmAppointment } from './tokens';
+import { confirmAppointment, cancelAppointment } from './tokens';
 
 const NOW = new Date('2026-07-13T08:00:00.000Z');
 const VALID_START = new Date('2026-07-14T08:00:00.000Z');
@@ -72,5 +72,57 @@ describe('confirmAppointment', () => {
     const secondAttempt = await confirmAppointment(prisma, appointment.confirmToken, confirmAt);
 
     expect(secondAttempt).toEqual({ ok: false, reason: 'INVALID_STATE' });
+  });
+});
+
+describe('cancelAppointment', () => {
+  it('cancela una cita PENDING', async () => {
+    const appointment = await createPendingAppointment();
+
+    const result = await cancelAppointment(prisma, appointment.cancelToken);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.appointment.status).toBe('CANCELLED');
+    }
+  });
+
+  it('cancela una cita CONFIRMED', async () => {
+    const appointment = await createPendingAppointment();
+    await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 5 * 60 * 1000));
+
+    const result = await cancelAppointment(prisma, appointment.cancelToken);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.appointment.status).toBe('CANCELLED');
+    }
+  });
+
+  it('es idempotente si la cita ya estaba CANCELLED', async () => {
+    const appointment = await createPendingAppointment();
+    await cancelAppointment(prisma, appointment.cancelToken);
+
+    const secondAttempt = await cancelAppointment(prisma, appointment.cancelToken);
+
+    expect(secondAttempt.ok).toBe(true);
+    if (secondAttempt.ok) {
+      expect(secondAttempt.appointment.status).toBe('CANCELLED');
+    }
+  });
+
+  it('devuelve NOT_FOUND si el token no existe', async () => {
+    const result = await cancelAppointment(prisma, 'token-inexistente');
+
+    expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
+  });
+
+  it('devuelve INVALID_STATE si la cita ya está COMPLETED', async () => {
+    const appointment = await createPendingAppointment();
+    await prisma.appointment.update({ where: { id: appointment.id }, data: { status: 'COMPLETED' } });
+
+    const result = await cancelAppointment(prisma, appointment.cancelToken);
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_STATE' });
   });
 });

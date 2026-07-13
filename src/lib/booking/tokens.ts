@@ -34,3 +34,32 @@ export async function confirmAppointment(
 
   return { ok: true, appointment: confirmed };
 }
+
+export type CancelAppointmentFailureReason = 'NOT_FOUND' | 'INVALID_STATE';
+
+export type CancelAppointmentResult =
+  | { ok: true; appointment: Appointment }
+  | { ok: false; reason: CancelAppointmentFailureReason };
+
+export async function cancelAppointment(prisma: PrismaClient, token: string): Promise<CancelAppointmentResult> {
+  const appointment = await prisma.appointment.findUnique({ where: { cancelToken: token } });
+
+  if (!appointment) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+
+  if (appointment.status === 'CANCELLED') {
+    return { ok: true, appointment };
+  }
+
+  if (appointment.status === 'COMPLETED' || appointment.status === 'NO_SHOW') {
+    return { ok: false, reason: 'INVALID_STATE' };
+  }
+
+  const cancelled = await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: { status: 'CANCELLED' },
+  });
+
+  return { ok: true, appointment: cancelled };
+}
