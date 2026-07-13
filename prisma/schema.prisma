@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum BusinessType {
+  HAIR_SALON
+  BARBERSHOP
+  CLINIC
+  SPA
+  OTHER
+}
+
+enum MembershipRole {
+  OWNER
+  STAFF
+}
+
+enum ThemePreset {
+  BOUTIQUE_EDITORIAL
+  VIBRANT
+  MINIMAL_SERENE
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AppointmentSource {
+  QR
+  WEB
+  MANUAL
+}
+
+model Business {
+  id                      String       @id @default(uuid())
+  slug                    String       @unique
+  name                    String
+  type                    BusinessType @default(OTHER)
+  address                 String?
+  phone                   String?
+  email                   String?
+  themePreset             ThemePreset  @default(BOUTIQUE_EDITORIAL)
+  accentColor             String       @default("#B25539")
+  logoUrl                 String?
+  maxBookingWindowDays    Int          @default(30)
+  minAdvanceNoticeMinutes Int          @default(60)
+  cancellationPolicy      String?
+  manualApproval          Boolean      @default(false)
+  slotGranularityMinutes  Int          @default(15)
+  active                  Boolean      @default(true)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  memberships      Membership[]
+  services         Service[]
+  employees        Employee[]
+  appointments     Appointment[]
+  customers        Customer[]
+  blacklistEntries BlacklistEntry[]
+  bookingAttempts  BookingAttempt[]
+}
+
+model Membership {
+  id         String         @id @default(uuid())
+  userId     String
+  businessId String
+  role       MembershipRole
+  createdAt  DateTime       @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+}
+
+model Service {
+  id                 String   @id @default(uuid())
+  businessId         String
+  name               String
+  description        String?
+  durationMinutes    Int
+  priceCents         Int
+  bufferAfterMinutes Int      @default(0)
+  active             Boolean  @default(true)
+  sortOrder          Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  employees    ServiceEmployee[]
+  appointments Appointment[]
+
+  @@index([businessId])
+}
+
+model Employee {
+  id         String   @id @default(uuid())
+  businessId String
+  name       String
+  photoUrl   String?
+  color      String   @default("#B25539")
+  userId     String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  services     ServiceEmployee[]
+  workingHours WorkingHours[]
+  timeOff      TimeOff[]
+  appointments Appointment[]
+
+  @@index([businessId])
+}
+
+model ServiceEmployee {
+  serviceId  String
+  employeeId String
+
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([serviceId, employeeId])
+}
+
+model WorkingHours {
+  id          String @id @default(uuid())
+  employeeId  String
+  weekday     Int
+  startMinute Int
+  endMinute   Int
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, weekday])
+}
+
+model TimeOff {
+  id         String   @id @default(uuid())
+  employeeId String
+  start      DateTime
+  end        DateTime
+  reason     String?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, start, end])
+}
+
+// La combinación (employeeId, start) debe ser única entre citas activas
+// (status PENDING o CONFIRMED) como red de seguridad ante condiciones de
+// carrera. Prisma no soporta índices únicos parciales en el DSL del schema:
+// el índice se crea a mano en prisma/migrations/<timestamp>_init/migration.sql
+// (ver Tarea 4 del plan de implementación). Si en el futuro se genera una
+// migración nueva con `prisma migrate dev`, revisa el SQL propuesto por si
+// intenta eliminar ese índice manual (no está descrito en este schema) y
+// quita esa sentencia antes de aplicarlo.
+model Appointment {
+  id            String            @id @default(uuid())
+  businessId    String
+  serviceId     String
+  employeeId    String
+  customerId    String
+  customerName  String
+  customerPhone String
+  customerEmail String
+  start         DateTime
+  end           DateTime
+  status        AppointmentStatus @default(PENDING)
+  confirmToken  String            @unique @default(uuid())
+  cancelToken   String            @unique @default(uuid())
+  source        AppointmentSource @default(WEB)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  service  Service  @relation(fields: [serviceId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([businessId])
+  @@index([employeeId, start])
+  @@index([customerId])
+}
+
+model Customer {
+  id               String   @id @default(uuid())
+  businessId       String
+  name             String
+  phone            String
+  email            String
+  registered       Boolean  @default(false)
+  marketingConsent Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  business     Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@unique([businessId, email])
+  @@unique([businessId, phone])
+}
+
+model BlacklistEntry {
+  id         String   @id @default(uuid())
+  businessId String
+  phone      String?
+  email      String?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+}
+
+// No forma parte del modelo de datos descrito literalmente en la spec, pero
+// es necesaria para implementar la regla anti-fraude "máx. 5 intentos de
+// reserva/hora por IP": registra cada intento de reserva (exitoso o no) por
+// negocio + IP para poder contarlos en una ventana de una hora.
+model BookingAttempt {
+  id         String   @id @default(uuid())
+  businessId String
+  ipAddress  String
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, ipAddress, createdAt])
+}
