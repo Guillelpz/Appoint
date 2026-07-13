@@ -58,6 +58,17 @@ describe('confirmAppointment', () => {
     expect(result).toEqual({ ok: false, reason: 'EXPIRED' });
   });
 
+  it('devuelve EXPIRED en el instante exacto de los 30 minutos (frontera de caducidad)', async () => {
+    // Convención canónica: la de activeAppointmentWhere (createdAt > now-30min
+    // ⇒ activa). En el instante exacto, la PENDING ya está caducada.
+    const appointment = await createPendingAppointment({ createdAt: NOW });
+    const confirmAt = new Date(NOW.getTime() + 30 * 60 * 1000); // exactamente 30 min después
+
+    const result = await confirmAppointment(prisma, appointment.confirmToken, confirmAt);
+
+    expect(result).toEqual({ ok: false, reason: 'EXPIRED' });
+  });
+
   it('devuelve NOT_FOUND si el token no existe', async () => {
     const result = await confirmAppointment(prisma, 'token-inexistente', NOW);
 
