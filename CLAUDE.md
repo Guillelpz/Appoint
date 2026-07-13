@@ -4,8 +4,9 @@ SaaS multi-tenant de gestión de citas para negocios locales (peluquerías, clí
 
 ## Documentos clave
 
-- **Especificación aprobada:** `docs/superpowers/specs/2026-07-12-appoint-design.md` — léela antes de tocar nada; contiene todas las decisiones validadas con el usuario.
-- **Planes de implementación:** `docs/superpowers/plans/` (cuando existan).
+- **⭐ Estado y siguientes pasos:** `docs/superpowers/CONTINUAR.md` — LEE ESTO PRIMERO al retomar el proyecto; dice qué está hecho, qué toca ahora (Fase 3: página pública) y los avisos técnicos del motor.
+- **Especificación aprobada:** `docs/superpowers/specs/2026-07-12-appoint-design.md` — todas las decisiones validadas con el usuario.
+- **Planes de implementación:** `docs/superpowers/plans/` (el de Fases 1-2 ya ejecutado y mergeado).
 
 ## Stack
 
@@ -27,4 +28,9 @@ SaaS multi-tenant de gestión de citas para negocios locales (peluquerías, clí
 
 ## Comandos
 
-(Se completarán al crear el proyecto: dev, build, test, lint, prisma migrate...)
+- `pnpm exec supabase start` — levantar Postgres local (Docker Desktop activo; BD dev en 127.0.0.1:54322, BD de tests `appoint_test`). Necesario antes de test/dev.
+- `pnpm test` — Vitest contra Postgres real (`TEST_DATABASE_URL`); 63 tests. `fileParallelism` desactivado a propósito (BD compartida): no lo reactives.
+- `pnpm dev` / `pnpm build` / `pnpm lint` — Next.js (dev con turbopack; build sin él, a propósito).
+- `pnpm exec prisma migrate dev` / `pnpm db:seed` — migraciones y seed demo ("Salón Aura").
+- `.env` no versionado: copiar de `.env.example` (valores de Supabase local ya válidos).
+- Versiones ancladas exactas (sin caret) a propósito: Next 15.5.20, Prisma 6.19.3, etc. No actualizar sin decisión explícita.
