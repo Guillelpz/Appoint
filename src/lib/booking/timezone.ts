@@ -1,12 +1,6 @@
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
-import { getDay } from 'date-fns';
 
 export const BUSINESS_TIMEZONE = 'Europe/Madrid';
-
-export function getLocalWeekday(utcDate: Date, timezone: string = BUSINESS_TIMEZONE): number {
-  const zoned = toZonedTime(utcDate, timezone);
-  return getDay(zoned);
-}
 
 export function getLocalDateString(utcDate: Date, timezone: string = BUSINESS_TIMEZONE): string {
   const zoned = toZonedTime(utcDate, timezone);
