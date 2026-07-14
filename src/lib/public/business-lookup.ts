@@ -25,6 +25,7 @@ export interface PublicBusiness {
   themePreset: ThemePreset;
   accentColor: string;
   logoUrl: string | null;
+  imageUrls: string[];
   manualApproval: boolean;
   maxBookingWindowDays: number;
   services: PublicBusinessService[];
@@ -54,6 +55,7 @@ export async function getPublicBusinessBySlug(prisma: PrismaClient, slug: string
     themePreset: business.themePreset,
     accentColor: business.accentColor,
     logoUrl: business.logoUrl,
+    imageUrls: business.imageUrls,
     manualApproval: business.manualApproval,
     maxBookingWindowDays: business.maxBookingWindowDays,
     services: business.services.map((s) => ({

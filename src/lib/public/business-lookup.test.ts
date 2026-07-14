@@ -15,6 +15,8 @@ describe('getPublicBusinessBySlug', () => {
     expect(business?.services.length).toBe(4);
     expect(business?.employees.length).toBe(2);
     expect(business?.maxBookingWindowDays).toBe(30);
+    expect(business?.imageUrls).toEqual(seed.business.imageUrls);
+    expect(business?.imageUrls.length).toBeGreaterThan(0);
   });
 
   it('devuelve null si el slug no existe', async () => {
