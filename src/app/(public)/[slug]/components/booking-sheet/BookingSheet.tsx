@@ -4,7 +4,12 @@ import { useReducer, useRef } from 'react';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 import { wizardReducer, createInitialWizardState } from '@/lib/public/wizard-state';
+import { bookAppointmentAction } from '../../actions';
 import { StepEmployee, type StepEmployeeOption } from './StepEmployee';
+import { StepDateTime } from './StepDateTime';
+import { StepCustomerData } from './StepCustomerData';
+import { StepSuccess } from './StepSuccess';
+import { StepError } from './StepError';
 
 gsap.registerPlugin(useGSAP);
 
@@ -23,7 +28,7 @@ export interface BookingSheetProps {
   onClose: () => void;
 }
 
-export function BookingSheet({ service, employees, onClose }: BookingSheetProps) {
+export function BookingSheet({ slug, service, employees, maxBookingWindowDays, onClose }: BookingSheetProps) {
   const [state, dispatch] = useReducer(wizardReducer, service.id, createInitialWizardState);
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -45,6 +50,34 @@ export function BookingSheet({ service, employees, onClose }: BookingSheetProps)
       .to(panelRef.current, { yPercent: 100, duration: 0.3, ease: 'power2.in' })
       .to(containerRef.current, { autoAlpha: 0, duration: 0.2 }, '<');
   });
+
+  async function handleCustomerDataSubmit(data: { name: string; phone: string; email: string }) {
+    dispatch({ type: 'SUBMIT_CUSTOMER_DATA', ...data });
+
+    if (!state.slotStart) {
+      return;
+    }
+
+    const result = await bookAppointmentAction({
+      slug,
+      serviceId: service.id,
+      employeeId: state.employeeId ?? undefined,
+      start: state.slotStart.toISOString(),
+      customerName: data.name,
+      customerPhone: data.phone,
+      customerEmail: data.email,
+    });
+
+    if (result.ok) {
+      dispatch({ type: 'SUBMISSION_SUCCEEDED', pendingApproval: result.pendingApproval ?? false });
+    } else {
+      dispatch({
+        type: 'SUBMISSION_FAILED',
+        message: result.message ?? 'No se pudo completar la reserva.',
+        alternativeSlots: (result.alternativeSlots ?? []).map((iso) => new Date(iso)),
+      });
+    }
+  }
 
   return (
     <div
@@ -73,10 +106,41 @@ export function BookingSheet({ service, employees, onClose }: BookingSheetProps)
           <StepEmployee employees={employees} onSelect={(employeeId) => dispatch({ type: 'SELECT_EMPLOYEE', employeeId })} />
         )}
 
-        {state.step !== 'EMPLOYEE' && (
-          <p className="py-8 text-center text-[var(--color-text-muted)]">
-            Este paso se completa en la Tarea 11 del plan de implementación.
-          </p>
+        {state.step === 'DATETIME' && (
+          <StepDateTime
+            slug={slug}
+            serviceId={service.id}
+            employeeId={state.employeeId}
+            maxBookingWindowDays={maxBookingWindowDays}
+            onBack={() => dispatch({ type: 'BACK' })}
+            onSelect={(start) => dispatch({ type: 'SELECT_SLOT', start })}
+          />
+        )}
+
+        {state.step === 'CUSTOMER_DATA' && state.slotStart && (
+          <StepCustomerData
+            service={service}
+            slotStart={state.slotStart}
+            onBack={() => dispatch({ type: 'BACK' })}
+            onSubmit={handleCustomerDataSubmit}
+          />
+        )}
+
+        {state.step === 'SUBMITTING' && (
+          <p className="py-8 text-center text-[var(--color-text-muted)]">Confirmando tu reserva…</p>
+        )}
+
+        {state.step === 'SUCCESS' && (
+          <StepSuccess pendingApproval={state.pendingApproval} onClose={handleClose} />
+        )}
+
+        {state.step === 'ERROR' && (
+          <StepError
+            message={state.errorMessage ?? ''}
+            alternativeSlots={state.alternativeSlots}
+            onBack={() => dispatch({ type: 'BACK' })}
+            onSelectAlternative={(start) => dispatch({ type: 'SELECT_SLOT', start })}
+          />
         )}
       </div>
     </div>
