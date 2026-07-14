@@ -19,7 +19,9 @@ export function StepDateTime({ slug, serviceId, employeeId, maxBookingWindowDays
   const [selectedDate, setSelectedDate] = useState(dayOptions[0]?.localDate ?? '');
   const [slots, setSlots] = useState<SlotOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [nextAvailable, setNextAvailable] = useState<DayOption | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!selectedDate) {
@@ -27,6 +29,7 @@ export function StepDateTime({ slug, serviceId, employeeId, maxBookingWindowDays
     }
     let cancelled = false;
     setLoading(true);
+    setError(false);
     setNextAvailable(null);
 
     fetchAvailableSlotsAction({
@@ -35,44 +38,62 @@ export function StepDateTime({ slug, serviceId, employeeId, maxBookingWindowDays
       employeeId: employeeId ?? undefined,
       dateFrom: selectedDate,
       dateTo: selectedDate,
-    }).then((result) => {
-      if (cancelled) {
-        return;
-      }
-      setSlots(result);
-      setLoading(false);
-
-      // Sin huecos ese día: busca el próximo día disponible dentro de la
-      // ventana de reserva del negocio para poder sugerirlo (spec: "Sin
-      // huecos disponibles → mensaje con próximo día disponible").
-      if (result.length === 0) {
-        const lastOption = dayOptions[dayOptions.length - 1];
-        const searchFrom = addDaysToLocalDateString(selectedDate, 1);
-        if (lastOption && searchFrom <= lastOption.localDate) {
-          fetchAvailableSlotsAction({
-            slug,
-            serviceId,
-            employeeId: employeeId ?? undefined,
-            dateFrom: searchFrom,
-            dateTo: lastOption.localDate,
-          }).then((widerResult) => {
-            if (cancelled || widerResult.length === 0) {
-              return;
-            }
-            const earliestLocalDate = getLocalDateString(new Date(widerResult[0].start));
-            const matchingOption = dayOptions.find((d) => d.localDate === earliestLocalDate);
-            if (matchingOption) {
-              setNextAvailable(matchingOption);
-            }
-          });
+    })
+      .then((result) => {
+        if (cancelled) {
+          return;
         }
-      }
-    });
+        setSlots(result);
+        setLoading(false);
+
+        // Sin huecos ese día: busca el próximo día disponible dentro de la
+        // ventana de reserva del negocio para poder sugerirlo (spec: "Sin
+        // huecos disponibles → mensaje con próximo día disponible"). Es una
+        // sugerencia opcional: si falla, se ignora en silencio sin afectar
+        // al estado de carga principal.
+        if (result.length === 0) {
+          const lastOption = dayOptions[dayOptions.length - 1];
+          const searchFrom = addDaysToLocalDateString(selectedDate, 1);
+          if (lastOption && searchFrom <= lastOption.localDate) {
+            fetchAvailableSlotsAction({
+              slug,
+              serviceId,
+              employeeId: employeeId ?? undefined,
+              dateFrom: searchFrom,
+              dateTo: lastOption.localDate,
+            })
+              .then((widerResult) => {
+                if (cancelled || widerResult.length === 0) {
+                  return;
+                }
+                const earliestLocalDate = getLocalDateString(new Date(widerResult[0].start));
+                const matchingOption = dayOptions.find((d) => d.localDate === earliestLocalDate);
+                if (matchingOption) {
+                  setNextAvailable(matchingOption);
+                }
+              })
+              .catch(() => {
+                // Sugerencia de "próxima disponibilidad": no crítica.
+              });
+          }
+        }
+      })
+      .catch(() => {
+        // La Server Action ha lanzado (red, error inesperado del
+        // servidor…): sin este catch "loading" se quedaba en true para
+        // siempre con "Buscando huecos disponibles…" colgado.
+        if (cancelled) {
+          return;
+        }
+        setSlots([]);
+        setLoading(false);
+        setError(true);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [slug, serviceId, employeeId, selectedDate, dayOptions]);
+  }, [slug, serviceId, employeeId, selectedDate, dayOptions, retryCount]);
 
   return (
     <div>
@@ -99,7 +120,20 @@ export function StepDateTime({ slug, serviceId, employeeId, maxBookingWindowDays
 
       {loading && <p className="text-sm text-[var(--color-text-muted)]">Buscando huecos disponibles…</p>}
 
-      {!loading && slots.length === 0 && (
+      {!loading && error && (
+        <div className="text-sm text-[var(--color-text-muted)]">
+          <p>No hemos podido cargar los huecos disponibles. Inténtalo de nuevo.</p>
+          <button
+            type="button"
+            onClick={() => setRetryCount((count) => count + 1)}
+            className="mt-2 font-medium text-[var(--color-accent)] underline"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && slots.length === 0 && (
         <div className="text-sm text-[var(--color-text-muted)]">
           <p>No hay huecos disponibles este día.</p>
           {nextAvailable && (

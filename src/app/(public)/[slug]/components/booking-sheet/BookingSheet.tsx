@@ -58,23 +58,34 @@ export function BookingSheet({ slug, service, employees, maxBookingWindowDays, o
       return;
     }
 
-    const result = await bookAppointmentAction({
-      slug,
-      serviceId: service.id,
-      employeeId: state.employeeId ?? undefined,
-      start: state.slotStart.toISOString(),
-      customerName: data.name,
-      customerPhone: data.phone,
-      customerEmail: data.email,
-    });
+    try {
+      const result = await bookAppointmentAction({
+        slug,
+        serviceId: service.id,
+        employeeId: state.employeeId ?? undefined,
+        start: state.slotStart.toISOString(),
+        customerName: data.name,
+        customerPhone: data.phone,
+        customerEmail: data.email,
+      });
 
-    if (result.ok) {
-      dispatch({ type: 'SUBMISSION_SUCCEEDED', pendingApproval: result.pendingApproval ?? false });
-    } else {
+      if (result.ok) {
+        dispatch({ type: 'SUBMISSION_SUCCEEDED', pendingApproval: result.pendingApproval ?? false });
+      } else {
+        dispatch({
+          type: 'SUBMISSION_FAILED',
+          message: result.message ?? 'No se pudo completar la reserva.',
+          alternativeSlots: (result.alternativeSlots ?? []).map((iso) => new Date(iso)),
+        });
+      }
+    } catch {
+      // La Server Action ha lanzado (red, error inesperado del servidor…):
+      // sin este catch el estado se quedaba en SUBMITTING para siempre con
+      // "Confirmando tu reserva…" colgado. Mensaje genérico sin alternativas;
+      // el usuario reintenta desde la pantalla de error existente.
       dispatch({
         type: 'SUBMISSION_FAILED',
-        message: result.message ?? 'No se pudo completar la reserva.',
-        alternativeSlots: (result.alternativeSlots ?? []).map((iso) => new Date(iso)),
+        message: 'No hemos podido completar la reserva. Inténtalo de nuevo en un momento.',
       });
     }
   }
