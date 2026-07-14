@@ -58,6 +58,15 @@ test('reservar, confirmar y cancelar una cita', async ({ page }) => {
   const confirmed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
   expect(confirmed.status).toBe('CONFIRMED');
 
+  // Idempotencia: revisitar el mismo enlace de confirmación (reload/back)
+  // tras confirmar con éxito debe seguir mostrando la pantalla de éxito,
+  // no la de error, y no debe alterar el estado en BD.
+  await page.goto(`/confirmar/${appointment.confirmToken}`);
+  await expect(page.getByRole('heading', { name: '¡Cita confirmada!' })).toBeVisible();
+
+  const stillConfirmed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+  expect(stillConfirmed.status).toBe('CONFIRMED');
+
   await page.goto(`/cita/${appointment.cancelToken}`);
   await page.getByRole('button', { name: 'Cancelar cita' }).click();
 

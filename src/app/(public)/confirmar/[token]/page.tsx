@@ -3,51 +3,13 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { confirmAppointment } from '@/lib/booking/tokens';
 import { getConfirmErrorMessage } from '@/lib/public/error-messages';
-import { getAppointmentByConfirmToken } from '@/lib/public/appointment-lookup';
-import { getPublicBusinessBySlug } from '@/lib/public/business-lookup';
+import { getAppointmentByConfirmToken, type PublicAppointmentSummary } from '@/lib/public/appointment-lookup';
+import { getPublicBusinessBySlug, type PublicBusiness } from '@/lib/public/business-lookup';
 import { getThemeCssVariables } from '@/lib/theme/theme';
 import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
 import { generateAppointmentIcs } from '@/lib/public/ics';
 
-export default async function ConfirmarPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
-  const result = await confirmAppointment(prisma, token);
-
-  if (!result.ok) {
-    // Para EXPIRED/INVALID_STATE la cita sí resuelve por token, así que el
-    // tema del negocio es recuperable; solo NOT_FOUND carece de negocio.
-    const errorSummary = await getAppointmentByConfirmToken(prisma, token);
-    const errorBusiness = errorSummary
-      ? await getPublicBusinessBySlug(prisma, errorSummary.businessSlug)
-      : null;
-
-    if (errorBusiness) {
-      const errorTheme = getThemeCssVariables(errorBusiness);
-      return (
-        <main
-          style={{ ...errorTheme, fontFamily: 'var(--font-body, var(--font-lora))' } as CSSProperties}
-          className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 bg-[var(--color-bg,#FAF6F0)] px-6 py-12 text-center text-[var(--color-text,#2B211B)]"
-        >
-          <h1 className="font-[family-name:var(--font-heading,serif)] text-2xl font-semibold">
-            No hemos podido confirmar tu cita
-          </h1>
-          <p className="text-[var(--color-text-muted,#666)]">{getConfirmErrorMessage(result.reason)}</p>
-        </main>
-      );
-    }
-
-    // Sin negocio que tematizar (NOT_FOUND): pantalla neutra, misma excepción
-    // documentada que not-found.tsx.
-    return (
-      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 bg-[#FAF6F0] px-6 py-12 text-center text-[#2B211B]">
-        <h1 className="text-2xl font-semibold">No hemos podido confirmar tu cita</h1>
-        <p className="text-[#6B5D53]">{getConfirmErrorMessage(result.reason)}</p>
-      </main>
-    );
-  }
-
-  const summary = await getAppointmentByConfirmToken(prisma, token);
-  const business = summary ? await getPublicBusinessBySlug(prisma, summary.businessSlug) : null;
+function renderSuccess(summary: PublicAppointmentSummary | null, business: PublicBusiness | null) {
   const theme = business ? getThemeCssVariables(business) : {};
 
   const icsDataUrl = summary
@@ -98,4 +60,56 @@ export default async function ConfirmarPage({ params }: { params: Promise<{ toke
       )}
     </main>
   );
+}
+
+export default async function ConfirmarPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const result = await confirmAppointment(prisma, token);
+
+  if (!result.ok) {
+    // Para EXPIRED/INVALID_STATE la cita sí resuelve por token, así que el
+    // tema del negocio es recuperable; solo NOT_FOUND carece de negocio.
+    const errorSummary = await getAppointmentByConfirmToken(prisma, token);
+    const errorBusiness = errorSummary
+      ? await getPublicBusinessBySlug(prisma, errorSummary.businessSlug)
+      : null;
+
+    // Idempotencia: una cita ya CONFIRMED cae en INVALID_STATE (no hay
+    // transición PENDING->CONFIRMED válida), pero para el usuario esto es
+    // simplemente un reload/back tras confirmar con éxito. Mostramos la
+    // misma pantalla de éxito en vez del error, que solo debe verse ante
+    // un estado realmente terminal (CANCELLED/COMPLETED/NO_SHOW) o EXPIRED.
+    if (result.reason === 'INVALID_STATE' && errorSummary?.status === 'CONFIRMED' && errorBusiness) {
+      return renderSuccess(errorSummary, errorBusiness);
+    }
+
+    if (errorBusiness) {
+      const errorTheme = getThemeCssVariables(errorBusiness);
+      return (
+        <main
+          style={{ ...errorTheme, fontFamily: 'var(--font-body, var(--font-lora))' } as CSSProperties}
+          className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 bg-[var(--color-bg,#FAF6F0)] px-6 py-12 text-center text-[var(--color-text,#2B211B)]"
+        >
+          <h1 className="font-[family-name:var(--font-heading,serif)] text-2xl font-semibold">
+            No hemos podido confirmar tu cita
+          </h1>
+          <p className="text-[var(--color-text-muted,#666)]">{getConfirmErrorMessage(result.reason)}</p>
+        </main>
+      );
+    }
+
+    // Sin negocio que tematizar (NOT_FOUND): pantalla neutra, misma excepción
+    // documentada que not-found.tsx.
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 bg-[#FAF6F0] px-6 py-12 text-center text-[#2B211B]">
+        <h1 className="text-2xl font-semibold">No hemos podido confirmar tu cita</h1>
+        <p className="text-[#6B5D53]">{getConfirmErrorMessage(result.reason)}</p>
+      </main>
+    );
+  }
+
+  const summary = await getAppointmentByConfirmToken(prisma, token);
+  const business = summary ? await getPublicBusinessBySlug(prisma, summary.businessSlug) : null;
+
+  return renderSuccess(summary, business);
 }
