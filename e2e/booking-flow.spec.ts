@@ -20,13 +20,25 @@ test('reservar, confirmar y cancelar una cita', async ({ page }) => {
   // no tiene huecos, avanza al día siguiente hasta encontrar uno disponible.
   const slotButton = page.locator('button', { hasText: /^\d{2}:\d{2}$/ }).first();
   const dayButtons = page.locator('button', { hasText: /^(dom|lun|mar|mié|jue|vie|sáb) \d{1,2} [a-zé]{3}$/ });
+  const emptyState = page.getByText('No hay huecos disponibles este día.');
 
   for (let attempt = 0; attempt < 8; attempt++) {
-    await expect(page.getByText('Buscando huecos disponibles…')).toBeHidden({ timeout: 10000 });
+    if (attempt > 0) {
+      // Espera determinista: `loading=true` se activa en un useEffect DESPUÉS
+      // del click, así que esperar solo a que el spinner esté oculto podría
+      // leer los huecos del día anterior. La respuesta del Server Action solo
+      // llega después de que el efecto haya desmontado ese estado stale.
+      const responsePromise = page.waitForResponse((r) => r.request().method() === 'POST');
+      await dayButtons.nth(attempt).click();
+      await responsePromise;
+    }
+    // Tras la respuesta, espera al render del nuevo estado (huecos o vacío)
+    // antes de decidir. En el día inicial (fetch en el mount, sin click previo)
+    // no hay estado stale, por lo que esta espera basta por sí sola.
+    await expect(slotButton.or(emptyState).first()).toBeVisible({ timeout: 10000 });
     if ((await slotButton.count()) > 0) {
       break;
     }
-    await dayButtons.nth(attempt + 1).click();
   }
   await slotButton.click();
 
