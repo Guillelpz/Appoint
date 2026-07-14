@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Construir la página pública de Appoint: el escaparate `/{slug}` con el tema visual del negocio, la hoja inferior (bottom sheet) de reserva con transiciones GSAP, las Server Actions que envuelven el motor de `src/lib/booking/` con resolución multi-tenant por slug, las páginas `/confirmar/{token}` y `/cita/{token}`, y un test Playwright end-to-end del flujo reservar → confirmar → cancelar.
+**Goal:** Construir la página pública de Appoint: el escaparate `/{slug}` con el tema visual del negocio y galería de fotos, la hoja inferior (bottom sheet) de reserva con transiciones GSAP, las Server Actions que envuelven el motor de `src/lib/booking/` con resolución multi-tenant por slug, las páginas `/confirmar/{token}` (con descarga de `.ics`) y `/cita/{token}`, y un test Playwright end-to-end del flujo reservar → confirmar → cancelar.
 
 **Architecture:** Toda la lógica de negocio nueva (temas, formateo, deduplicación de huecos, mensajes de error, máquina de estados de la hoja de reserva) vive en `src/lib/theme/` y `src/lib/public/` como funciones puras o funciones que reciben `PrismaClient` como parámetro (igual que `src/lib/booking/`), cubiertas por Vitest con la misma disciplina TDD que las Fases 1-2. La UI vive en un route group `src/app/(public)/` con sus propias fuentes (`next/font/google`) y variables CSS de tema calculadas en el servidor (sin FOUC): cada página fija esas variables con un `style` inline sobre un contenedor, y los componentes leen `var(--color-accent)`, `var(--font-heading)`, etc. — nunca colores/fuentes fijos. Las Server Actions (`'use server'`) son wrappers finos que resuelven `slug → businessId`, delegan en los servicios de `src/lib/public/` y traducen los `reason` tipados del motor a mensajes en español. El flujo completo se valida con un test Playwright que corre contra la base de datos de test (`TEST_DATABASE_URL`), reutilizando el patrón de `globalSetup` + truncado ya usado por Vitest.
 
@@ -22,6 +22,10 @@
 - **`fileParallelism` desactivado a propósito** en `vitest.config.ts` (BD compartida): no lo reactives.
 - Todos los comandos del plan son compatibles con PowerShell/Windows.
 - Deuda consciente aceptada del motor (no tocar): TOCTOU en límites anti-fraude fuera de la transacción; `checkRateLimit` acoplado al flujo insertar-antes-de-contar.
+- **Fotos del negocio (decisión ya tomada, no reabrir):** `Business.imageUrls String[]` (migración de la Tarea 8), sembrado con 3 URLs estables de `picsum.photos/seed/...` para "Salón Aura". No se sube ningún archivo a almacenamiento propio en esta fase.
+- **Registro opcional post-reserva (magic link):** fuera de alcance de esta fase — Supabase Auth para clientes finales aún no está configurado. No añadir ningún flujo de registro en las páginas públicas.
+- **Emails (Fase 4):** todavía no existen. La pantalla de éxito de la hoja de reserva (Tarea 11) dice que se ha enviado un email de confirmación, pero en desarrollo el `confirmToken`/`cancelToken` se leen directamente de la base de datos (ver los pasos de verificación manual de las Tareas 14-15 y el test e2e de la Tarea 16, que consulta `prisma.appointment` en vez de leer un email real).
+- **Modelo sugerido por tarea:** cada tarea indica `haiku` (código completo en el plan, transcripción mecánica) o `sonnet` (integración, entorno, o juicio de diseño visual) según la política del proyecto (`docs/superpowers/CONTINUAR.md`). Todos los revisores por tarea usan sonnet igualmente, independientemente del modelo del implementador.
 
 ---
 
@@ -29,13 +33,15 @@
 
 ### Tarea 1: Presets de tema y variables CSS
 
+**Modelo sugerido:** haiku
+
 **Files:**
 - Create: `src/lib/theme/theme.ts`
 - Test: `src/lib/theme/theme.test.ts`
 
 **Interfaces:**
 - Consumes: `ThemePreset` (enum de `@prisma/client`, valores `BOUTIQUE_EDITORIAL | VIBRANT | MINIMAL_SERENE`).
-- Produces: `THEME_PRESETS: Record<ThemePreset, ThemeDefinition>`, `getContrastTextColor(hexColor: string): string`, `getThemeCssVariables(business: BusinessThemeInput): ThemeCssVariables` (donde `BusinessThemeInput = { themePreset: ThemePreset; accentColor: string }` y `ThemeCssVariables = Record<string, string>` con las claves `--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-accent`, `--color-accent-contrast`, `--font-heading`, `--font-body`, `--radius-theme`, `--shadow-theme`). Usado por todas las páginas públicas (Tareas 9, 11-13) y por la Tarea 8 (fuentes que definen `--font-playfair`, `--font-lora`, `--font-poppins`, `--font-inter`, `--font-work-sans`).
+- Produces: `THEME_PRESETS: Record<ThemePreset, ThemeDefinition>`, `getContrastTextColor(hexColor: string): string`, `getThemeCssVariables(business: BusinessThemeInput): ThemeCssVariables` (donde `BusinessThemeInput = { themePreset: ThemePreset; accentColor: string }` y `ThemeCssVariables = Record<string, string>` con las claves `--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-accent`, `--color-accent-contrast`, `--font-heading`, `--font-body`, `--radius-theme`, `--shadow-theme`). Usado por todas las páginas públicas (Tareas 10, 12, 14-15) y por la Tarea 9 (fuentes que definen `--font-playfair`, `--font-lora`, `--font-poppins`, `--font-inter`, `--font-work-sans`).
 
 > **Nota de diseño (no cubierta literalmente por la spec):** la spec solo detalla colores/tipografía del preset "Boutique editorial" (crema/terracota `#B25539`, serif). Los valores de "Vibrante" y "Minimal sereno" de abajo son una propuesta razonable, no una decisión validada con el usuario — repórtalo como duda de negocio si no ha sido confirmado.
 
@@ -202,13 +208,15 @@ git commit -m "feat(theme): presets de tema y variables CSS por negocio"
 
 ### Tarea 2: Utilidades públicas de formato (fecha, precio, duración, opciones de día)
 
+**Modelo sugerido:** haiku
+
 **Files:**
 - Create: `src/lib/public/format-datetime.ts`
 - Test: `src/lib/public/format-datetime.test.ts`
 
 **Interfaces:**
 - Consumes: `getLocalDateString`, `addDaysToLocalDateString`, `BUSINESS_TIMEZONE` de `@/lib/booking/timezone`.
-- Produces: `formatAppointmentDateTime(utcDate: Date): string`, `formatSlotTime(utcDate: Date): string` (hora `HH:mm` en `Europe/Madrid`, sin `Intl`), `formatPriceCents(cents: number): string`, `formatDurationMinutes(minutes: number): string`, `buildDayOptions(now: Date, maxDays: number): DayOption[]` (donde `DayOption = { localDate: string; label: string }`). Usados por los componentes de la hoja de reserva (Tareas 9-10) y las páginas de confirmación/cancelación (Tareas 12-13).
+- Produces: `formatAppointmentDateTime(utcDate: Date): string`, `formatSlotTime(utcDate: Date): string` (hora `HH:mm` en `Europe/Madrid`, sin `Intl`), `formatPriceCents(cents: number): string`, `formatDurationMinutes(minutes: number): string`, `buildDayOptions(now: Date, maxDays: number): DayOption[]` (donde `DayOption = { localDate: string; label: string }`). Usados por los componentes de la hoja de reserva (Tareas 10-11) y las páginas de confirmación/cancelación (Tareas 14-15).
 
 - [ ] **Step 1: Escribir los tests**
 
@@ -378,6 +386,8 @@ git commit -m "feat(public): utilidades de formato de fecha, precio y duración"
 
 ### Tarea 3: Deduplicación de huecos para "cualquier profesional"
 
+**Modelo sugerido:** haiku
+
 **Files:**
 - Create: `src/lib/public/dedupe-slots.ts`
 - Test: `src/lib/public/dedupe-slots.test.ts`
@@ -486,13 +496,15 @@ git commit -m "feat(public): deduplicar huecos por start para \"cualquier profes
 
 ### Tarea 4: Mensajes de error amables
 
+**Modelo sugerido:** haiku
+
 **Files:**
 - Create: `src/lib/public/error-messages.ts`
 - Test: `src/lib/public/error-messages.test.ts`
 
 **Interfaces:**
 - Consumes: `CreateAppointmentFailureReason` de `@/lib/booking/create-appointment`; `ConfirmAppointmentFailureReason`, `CancelAppointmentFailureReason` de `@/lib/booking/tokens`.
-- Produces: `getBookingErrorMessage(reason: CreateAppointmentFailureReason): string`, `getConfirmErrorMessage(reason: ConfirmAppointmentFailureReason): string`, `getCancelErrorMessage(reason: CancelAppointmentFailureReason): string`. Usados por la Tarea 7 (`booking-service.ts`) y las Tareas 12-13 (páginas de confirmar/cancelar).
+- Produces: `getBookingErrorMessage(reason: CreateAppointmentFailureReason): string`, `getConfirmErrorMessage(reason: ConfirmAppointmentFailureReason): string`, `getCancelErrorMessage(reason: CancelAppointmentFailureReason): string`. Usados por la Tarea 7 (`booking-service.ts`) y las Tareas 14-15 (páginas de confirmar/cancelar).
 
 - [ ] **Step 1: Escribir los tests**
 
@@ -637,13 +649,15 @@ git commit -m "feat(public): mensajes de error amables para reservar, confirmar 
 
 ### Tarea 5: Máquina de estados de la hoja de reserva
 
+**Modelo sugerido:** haiku
+
 **Files:**
 - Create: `src/lib/public/wizard-state.ts`
 - Test: `src/lib/public/wizard-state.test.ts`
 
 **Interfaces:**
 - Consumes: nada (lógica pura).
-- Produces: `WizardStep = 'EMPLOYEE' | 'DATETIME' | 'CUSTOMER_DATA' | 'SUBMITTING' | 'SUCCESS' | 'ERROR'`, `WizardState`, `WizardAction`, `createInitialWizardState(serviceId: string): WizardState`, `wizardReducer(state: WizardState, action: WizardAction): WizardState`. Usado por `BookingSheet.tsx` (Tareas 9-10).
+- Produces: `WizardStep = 'EMPLOYEE' | 'DATETIME' | 'CUSTOMER_DATA' | 'SUBMITTING' | 'SUCCESS' | 'ERROR'`, `WizardState`, `WizardAction`, `createInitialWizardState(serviceId: string): WizardState`, `wizardReducer(state: WizardState, action: WizardAction): WizardState`. Usado por `BookingSheet.tsx` (Tareas 10-11).
 
 - [ ] **Step 1: Escribir los tests**
 
@@ -860,6 +874,8 @@ git commit -m "feat(public): máquina de estados pura de la hoja de reserva"
 
 ### Tarea 6: Lookup público de negocio por slug y de cita por token
 
+**Modelo sugerido:** haiku
+
 **Files:**
 - Create: `src/lib/public/business-lookup.ts`, `src/lib/public/appointment-lookup.ts`
 - Test: `src/lib/public/business-lookup.test.ts`, `src/lib/public/appointment-lookup.test.ts`
@@ -875,7 +891,7 @@ git commit -m "feat(public): máquina de estados pura de la hoja de reserva"
   - `getAppointmentByConfirmToken(prisma: PrismaClient, token: string): Promise<PublicAppointmentSummary | null>`
   - `getAppointmentByCancelToken(prisma: PrismaClient, token: string): Promise<PublicAppointmentSummary | null>`
 
-  Usados por la Tarea 7 (`booking-service.ts`, `slots-service.ts`) y las Tareas 9, 11-13 (páginas).
+  Usados por la Tarea 7 (`booking-service.ts`, `slots-service.ts`) y las Tareas 10, 12, 14-15 (páginas). La Tarea 8 amplía `PublicBusiness` con el campo `imageUrls: string[]`.
 
 - [ ] **Step 1: Escribir los tests de `business-lookup`**
 
@@ -1191,6 +1207,8 @@ git commit -m "feat(public): lookup de negocio por slug y de cita por token"
 
 ### Tarea 7: Servicios de huecos y de reserva con resolución slug→businessId
 
+**Modelo sugerido:** haiku
+
 **Files:**
 - Create: `src/lib/public/slots-service.ts`, `src/lib/public/booking-service.ts`
 - Test: `src/lib/public/slots-service.test.ts`, `src/lib/public/booking-service.test.ts`
@@ -1204,7 +1222,7 @@ git commit -m "feat(public): lookup de negocio por slug y de cita por token"
   - `BookAppointmentBySlugResult = { ok: true; confirmToken: string; cancelToken: string; pendingApproval: boolean } | { ok: false; message: string; alternativeSlots: Date[] }`
   - `bookAppointmentBySlug(prisma: PrismaClient, input: BookAppointmentBySlugInput): Promise<BookAppointmentBySlugResult>`
 
-  Usados por las Server Actions de la Tarea 9-10 (`actions.ts`).
+  Usados por las Server Actions de la Tarea 10-11 (`actions.ts`).
 
 - [ ] **Step 1: Escribir los tests de `slots-service`**
 
@@ -1572,7 +1590,180 @@ git commit -m "feat(public): servicios de huecos y reserva con resolución slug-
 
 ---
 
-### Tarea 8: Layout público con fuentes y tema sin FOUC
+### Tarea 8: Campo `imageUrls` en Business — migración Prisma y fotos de muestra
+
+**Modelo sugerido:** sonnet (migración de Prisma + verificación del SQL generado requieren juicio, no es transcripción pura)
+
+**Files:**
+- Modify: `prisma/schema.prisma:44-71` (modelo `Business`), `src/lib/seed/demo-business.ts`, `src/lib/public/business-lookup.ts`
+- Test: `src/lib/public/business-lookup.test.ts`
+- Create: migración generada por Prisma en `prisma/migrations/<timestamp>_add_business_image_urls/migration.sql` (el timestamp lo genera la CLI, no lo escribas a mano)
+
+**Interfaces:**
+- Consumes: modelo `Business` de `prisma/schema.prisma`; `PublicBusiness`, `getPublicBusinessBySlug` de `./business-lookup` (Tarea 6, ya implementada — esta tarea la amplía).
+- Produces: columna `Business.imageUrls String[] @default([])`; `PublicBusiness.imageUrls: string[]` (usado por la Tarea 12, galería de fotos del escaparate); `seedDemoBusiness` siembra 3 URLs de muestra en `business.imageUrls`.
+
+> **Nota de diseño (decisión ya tomada por el usuario, no reabrir):** las fotos son URLs externas estables de `picsum.photos` con semilla fija (mismo parámetro `seed` ⇒ misma imagen siempre, a diferencia de `picsum.photos/1200/800` sin semilla que devuelve una imagen aleatoria distinta en cada petición). No se sube ningún archivo a almacenamiento propio en esta fase.
+
+- [ ] **Step 1: Añadir el campo `imageUrls` al modelo `Business`**
+
+Edita `prisma/schema.prisma`, en el modelo `Business` (línea 54, justo después de `logoUrl`):
+
+```prisma
+  logoUrl                 String?
+  imageUrls               String[]     @default([])
+  maxBookingWindowDays    Int          @default(30)
+```
+
+- [ ] **Step 2: Generar y aplicar la migración**
+
+```powershell
+pnpm exec supabase start
+pnpm exec prisma migrate dev --name add_business_image_urls
+```
+
+Expected: la CLI crea `prisma/migrations/<timestamp>_add_business_image_urls/migration.sql` con un único `ALTER TABLE "Business" ADD COLUMN "imageUrls" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];` (o equivalente), la aplica a la BD de `DATABASE_URL` y regenera el cliente de Prisma. **Antes de continuar, abre el SQL generado y confirma que no toca el índice único parcial `Appointment_employeeId_start_active_key`** (el comentario de `prisma/schema.prisma:160-167` avisa de que `prisma migrate dev` puede proponer eliminarlo porque no está descrito en el DSL del schema; esta migración solo añade una columna a `Business`, así que no debería mencionar `Appointment` en absoluto — si lo hace, elimina esa sentencia del SQL antes de que la migración se marque como aplicada).
+
+- [ ] **Step 3: Escribir el test de `business-lookup` que falla**
+
+Edita `src/lib/public/business-lookup.test.ts`: sustituye el primer `it` ("devuelve el negocio con sus servicios y empleados activos") por esta versión, que añade dos aserciones sobre `imageUrls` al final:
+
+```typescript
+  it('devuelve el negocio con sus servicios y empleados activos', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const business = await getPublicBusinessBySlug(prisma, 'salon-aura');
+
+    expect(business).not.toBeNull();
+    expect(business?.id).toBe(seed.business.id);
+    expect(business?.name).toBe('Salón Aura');
+    expect(business?.services.length).toBe(4);
+    expect(business?.employees.length).toBe(2);
+    expect(business?.maxBookingWindowDays).toBe(30);
+    expect(business?.imageUrls).toEqual(seed.business.imageUrls);
+    expect(business?.imageUrls.length).toBeGreaterThan(0);
+  });
+```
+
+- [ ] **Step 4: Ejecutar el test y comprobar que falla**
+
+```powershell
+pnpm test business-lookup.test.ts
+```
+
+Expected: FAIL — `expect(business?.imageUrls).toEqual(...)` recibe `undefined` porque `getPublicBusinessBySlug` todavía no mapea `imageUrls`.
+
+- [ ] **Step 5: Sembrar fotos de muestra en `seedDemoBusiness`**
+
+Edita `src/lib/seed/demo-business.ts`, en la creación del negocio (dentro de `prisma.business.create({ data: { ... } })`), añade el campo `imageUrls` junto a `logoUrl`:
+
+```typescript
+  const business = await prisma.business.create({
+    data: {
+      slug: 'salon-aura',
+      name: 'Salón Aura',
+      type: BusinessType.HAIR_SALON,
+      address: 'Calle Mayor 10, Madrid',
+      phone: '+34600111222',
+      email: 'hola@salonaura.example',
+      themePreset: ThemePreset.BOUTIQUE_EDITORIAL,
+      accentColor: '#B25539',
+      imageUrls: [
+        'https://picsum.photos/seed/salon-aura-1/1200/800',
+        'https://picsum.photos/seed/salon-aura-2/1200/800',
+        'https://picsum.photos/seed/salon-aura-3/1200/800',
+      ],
+      manualApproval: false,
+      slotGranularityMinutes: 15,
+      minAdvanceNoticeMinutes: 60,
+      maxBookingWindowDays: 30,
+      active: true,
+    },
+  });
+```
+
+- [ ] **Step 6: Implementar el mapeo en `business-lookup.ts`**
+
+Edita `src/lib/public/business-lookup.ts`: añade `imageUrls: string[];` a la interfaz `PublicBusiness` (junto a `logoUrl`) y `imageUrls: business.imageUrls,` en el `return` de `getPublicBusinessBySlug` (junto a `logoUrl: business.logoUrl,`):
+
+```typescript
+export interface PublicBusiness {
+  id: string;
+  slug: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  themePreset: ThemePreset;
+  accentColor: string;
+  logoUrl: string | null;
+  imageUrls: string[];
+  manualApproval: boolean;
+  maxBookingWindowDays: number;
+  services: PublicBusinessService[];
+  employees: PublicBusinessEmployee[];
+}
+```
+
+```typescript
+  return {
+    id: business.id,
+    slug: business.slug,
+    name: business.name,
+    address: business.address,
+    phone: business.phone,
+    email: business.email,
+    themePreset: business.themePreset,
+    accentColor: business.accentColor,
+    logoUrl: business.logoUrl,
+    imageUrls: business.imageUrls,
+    manualApproval: business.manualApproval,
+    maxBookingWindowDays: business.maxBookingWindowDays,
+    services: business.services.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      durationMinutes: s.durationMinutes,
+      priceCents: s.priceCents,
+    })),
+    employees: business.employees.map((e) => ({
+      id: e.id,
+      name: e.name,
+      photoUrl: e.photoUrl,
+      color: e.color,
+    })),
+  };
+```
+
+- [ ] **Step 7: Ejecutar los tests y comprobar que pasan**
+
+```powershell
+pnpm test business-lookup.test.ts demo-business.test.ts
+```
+
+Expected: todos en verde. `seed.business.imageUrls` ahora tiene 3 elementos.
+
+- [ ] **Step 8: Ejecutar toda la suite y resembrar la BD de desarrollo**
+
+```powershell
+pnpm test
+pnpm db:seed
+```
+
+Expected: `pnpm test` sigue en verde (63 tests previos + los nuevos de esta tarea); `pnpm db:seed` recrea "Salón Aura" con las 3 fotos.
+
+- [ ] **Step 9: Commit**
+
+```powershell
+git add prisma/schema.prisma prisma/migrations src/lib/seed/demo-business.ts src/lib/public/business-lookup.ts src/lib/public/business-lookup.test.ts
+git commit -m "feat(public): añade imageUrls a Business con fotos de muestra en el seed"
+```
+
+---
+
+### Tarea 9: Layout público con fuentes y tema sin FOUC
+
+**Modelo sugerido:** haiku
 
 **Files:**
 - Create: `src/app/(public)/layout.tsx`
@@ -1637,7 +1828,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
 
 Notas:
 
-- El `bg-[#FAF6F0]` de este `div` es solo un color de respaldo (Boutique editorial) para el instante entre la carga del layout y el render de la página hija — cada página pública (Tareas 11-13) fija sus propias variables `--color-*` con `getThemeCssVariables()` sobre un contenedor que cubre toda la vista, así que no hay FOUC real: el HTML llega ya con el tema correcto del negocio.
+- El `bg-[#FAF6F0]` de este `div` es solo un color de respaldo (Boutique editorial) para el instante entre la carga del layout y el render de la página hija — cada página pública (Tareas 12, 14-15) fija sus propias variables `--color-*` con `getThemeCssVariables()` sobre un contenedor que cubre toda la vista, así que no hay FOUC real: el HTML llega ya con el tema correcto del negocio.
 - El `fontFamily` con fallback anula el `Arial` hardcodeado en `globals.css` para todo el subárbol público (regla de theming del proyecto). En este `div` la variable `--font-body` aún no existe (la definen los contenedores temáticos de las páginas hijas), así que aquí resuelve al fallback `var(--font-lora)` — la fuente de cuerpo del preset por defecto, que es lo que deben usar las pantallas sin negocio conocido (p. ej. `not-found`). Importante: `var()` se resuelve en el elemento donde se declara la propiedad, no en los descendientes; por eso los contenedores temáticos de las Tareas 11-13 vuelven a declarar `fontFamily: 'var(--font-body)'` junto a las variables del tema, y ahí sí resuelve a la fuente del preset del negocio.
 
 - [ ] **Step 2: Comprobar que el proyecto sigue compilando**
@@ -1657,7 +1848,9 @@ git commit -m "feat(public): layout público con las fuentes de los tres presets
 
 ---
 
-### Tarea 9: Hoja de reserva — estructura, animación GSAP, Server Action de huecos y paso "profesional"
+### Tarea 10: Hoja de reserva — estructura, animación GSAP, Server Action de huecos y paso "profesional"
+
+**Modelo sugerido:** sonnet (diseño visual + integración GSAP, requiere invocar skills y tomar decisiones de composición)
 
 **Antes de escribir componentes visuales:** invoca las skills `frontend-design` y `gsap-react` (usa el Skill tool con esos nombres) para definir la composición visual de la hoja inferior y el patrón correcto de `useGSAP` antes de escribir el JSX de esta tarea.
 
@@ -1669,9 +1862,9 @@ git commit -m "feat(public): layout público con las fuentes de los tres presets
 - Produces:
   - `FetchSlotsActionInput = { slug: string; serviceId: string; employeeId?: string; dateFrom: string; dateTo: string }`
   - `SlotOption = { start: string; end: string; employeeIds: string[] }`
-  - `fetchAvailableSlotsAction(input: FetchSlotsActionInput): Promise<SlotOption[]>` — Server Action, usada por `StepDateTime` (Tarea 10).
+  - `fetchAvailableSlotsAction(input: FetchSlotsActionInput): Promise<SlotOption[]>` — Server Action, usada por `StepDateTime` (Tarea 11).
   - `BookingSheetProps = { slug: string; service: { id: string; name: string; durationMinutes: number; priceCents: number }; employees: { id: string; name: string; photoUrl: string | null; color: string }[]; maxBookingWindowDays: number; onClose: () => void }` (nota: `manualApproval` no viaja como prop del cliente — el servidor ya decide el `pendingApproval` de cada reserva concreta y lo devuelve en la respuesta de `bookAppointmentAction`, así que la UI no necesita conocer el ajuste del negocio de antemano)
-  - `BookingSheet(props: BookingSheetProps)` — componente cliente, consumido por `BookingLauncherProvider` (Tarea 11). En esta tarea solo implementa completamente el paso `EMPLOYEE`; los pasos `DATETIME`/`CUSTOMER_DATA`/`SUBMITTING`/`SUCCESS`/`ERROR` se completan en la Tarea 10 (que reemplaza este archivo entero).
+  - `BookingSheet(props: BookingSheetProps)` — componente cliente, consumido por `BookingLauncherProvider` (Tarea 12). En esta tarea solo implementa completamente el paso `EMPLOYEE`; los pasos `DATETIME`/`CUSTOMER_DATA`/`SUBMITTING`/`SUCCESS`/`ERROR` se completan en la Tarea 11 (que reemplaza este archivo entero).
 
 - [ ] **Step 1: Instalar GSAP y `@gsap/react`**
 
@@ -1770,7 +1963,7 @@ export async function bookAppointmentAction(input: BookAppointmentActionInput): 
 }
 ```
 
-Nota: `bookAppointmentAction` ya se implementa completa en esta tarea (aunque solo se consuma desde la UI en la Tarea 10) porque vive en el mismo archivo `'use server'` que `fetchAvailableSlotsAction` — así el archivo no cambia de forma entre tareas, solo se añaden sus consumidores.
+Nota: `bookAppointmentAction` ya se implementa completa en esta tarea (aunque solo se consuma desde la UI en la Tarea 11) porque vive en el mismo archivo `'use server'` que `fetchAvailableSlotsAction` — así el archivo no cambia de forma entre tareas, solo se añaden sus consumidores.
 
 - [ ] **Step 3: Crear el paso "profesional"**
 
@@ -1902,7 +2095,7 @@ export function BookingSheet({ service, employees, onClose }: BookingSheetProps)
 
         {state.step !== 'EMPLOYEE' && (
           <p className="py-8 text-center text-[var(--color-text-muted)]">
-            Este paso se completa en la Tarea 10 del plan de implementación.
+            Este paso se completa en la Tarea 11 del plan de implementación.
           </p>
         )}
       </div>
@@ -1928,17 +2121,19 @@ git commit -m "feat(public): shell de la hoja de reserva con animación GSAP y p
 
 ---
 
-### Tarea 10: Hoja de reserva — día/hora, datos del cliente, envío, éxito y error
+### Tarea 11: Hoja de reserva — día/hora, datos del cliente, envío, éxito y error
+
+**Modelo sugerido:** sonnet (integración de los 6 pasos del wizard con GSAP y Server Actions, requiere juicio de composición)
 
 **Antes de escribir componentes visuales:** invoca de nuevo las skills `frontend-design` y `gsap-react` si necesitas ajustar la composición de los nuevos pasos (chips de horas, formulario, pantalla de éxito).
 
 **Files:**
 - Create: `src/app/(public)/[slug]/components/booking-sheet/StepDateTime.tsx`, `src/app/(public)/[slug]/components/booking-sheet/StepCustomerData.tsx`, `src/app/(public)/[slug]/components/booking-sheet/StepSuccess.tsx`, `src/app/(public)/[slug]/components/booking-sheet/StepError.tsx`
-- Modify: `src/app/(public)/[slug]/components/booking-sheet/BookingSheet.tsx` (reemplaza el contenido completo de la Tarea 9)
+- Modify: `src/app/(public)/[slug]/components/booking-sheet/BookingSheet.tsx` (reemplaza el contenido completo de la Tarea 10)
 
 **Interfaces:**
-- Consumes: `buildDayOptions`, `formatAppointmentDateTime`, `formatSlotTime`, `formatPriceCents`, `formatDurationMinutes` de `@/lib/public/format-datetime` (Tarea 2); `fetchAvailableSlotsAction`, `bookAppointmentAction`, `SlotOption` de `../../actions` (Tarea 9); `wizardReducer`, `createInitialWizardState` de `@/lib/public/wizard-state` (Tarea 5).
-- Produces: `BookingSheet` completo (los 6 pasos), usado tal cual por `BookingLauncherProvider` (Tarea 11) — la firma de `BookingSheetProps` no cambia respecto a la Tarea 9.
+- Consumes: `buildDayOptions`, `formatAppointmentDateTime`, `formatSlotTime`, `formatPriceCents`, `formatDurationMinutes` de `@/lib/public/format-datetime` (Tarea 2); `fetchAvailableSlotsAction`, `bookAppointmentAction`, `SlotOption` de `../../actions` (Tarea 10); `wizardReducer`, `createInitialWizardState` de `@/lib/public/wizard-state` (Tarea 5).
+- Produces: `BookingSheet` completo (los 6 pasos), usado tal cual por `BookingLauncherProvider` (Tarea 12) — la firma de `BookingSheetProps` no cambia respecto a la Tarea 10.
 
 - [ ] **Step 1: Crear el paso "día/hora"**
 
@@ -2419,16 +2614,18 @@ git commit -m "feat(public): completa la hoja de reserva (día/hora, datos, éxi
 
 ---
 
-### Tarea 11: Escaparate `/{slug}`: cabecera, servicios, equipo y apertura de la hoja
+### Tarea 12: Escaparate `/{slug}`: cabecera, galería de fotos, servicios, equipo y apertura de la hoja
 
-**Antes de escribir componentes visuales:** invoca la skill `frontend-design` para definir la composición de la cabecera, las tarjetas de servicio y el equipo (jerarquía tipográfica, espaciado, uso de las variables de tema) antes de escribir el JSX de esta tarea.
+**Modelo sugerido:** sonnet (composición visual completa de la página pública, requiere invocar `frontend-design` y tomar decisiones de layout)
+
+**Antes de escribir componentes visuales:** invoca la skill `frontend-design` para definir la composición de la cabecera, la galería de fotos, las tarjetas de servicio y el equipo (jerarquía tipográfica, espaciado, uso de las variables de tema) antes de escribir el JSX de esta tarea.
 
 **Files:**
-- Create: `src/app/(public)/[slug]/components/BookingLauncherProvider.tsx`, `src/app/(public)/[slug]/components/ServiceCard.tsx`, `src/app/(public)/[slug]/page.tsx`, `src/app/(public)/[slug]/not-found.tsx`
+- Create: `src/app/(public)/[slug]/components/BookingLauncherProvider.tsx`, `src/app/(public)/[slug]/components/ServiceCard.tsx`, `src/app/(public)/[slug]/components/ImageGallery.tsx`, `src/app/(public)/[slug]/page.tsx`, `src/app/(public)/[slug]/not-found.tsx`
 
 **Interfaces:**
-- Consumes: `getPublicBusinessBySlug` de `@/lib/public/business-lookup` (Tarea 6); `getThemeCssVariables` de `@/lib/theme/theme` (Tarea 1); `formatDurationMinutes`, `formatPriceCents` de `@/lib/public/format-datetime` (Tarea 2); `BookingSheet` de `./components/booking-sheet/BookingSheet` (Tareas 9-10); `prisma` de `@/lib/db`.
-- Produces: ruta pública `/{slug}` completa. `useBookingLauncher(): { openService: (serviceId: string) => void }` — hook de contexto disponible para cualquier componente cliente dentro de `BookingLauncherProvider`.
+- Consumes: `getPublicBusinessBySlug` de `@/lib/public/business-lookup` (Tarea 6, ampliada con `imageUrls` en la Tarea 8); `getThemeCssVariables` de `@/lib/theme/theme` (Tarea 1); `formatDurationMinutes`, `formatPriceCents` de `@/lib/public/format-datetime` (Tarea 2); `BookingSheet` de `./components/booking-sheet/BookingSheet` (Tareas 10-11); `prisma` de `@/lib/db`.
+- Produces: ruta pública `/{slug}` completa, con galería de fotos cuando `business.imageUrls.length > 0`. `useBookingLauncher(): { openService: (serviceId: string) => void }` — hook de contexto disponible para cualquier componente cliente dentro de `BookingLauncherProvider`.
 
 - [ ] **Step 1: Crear el proveedor de contexto de la hoja de reserva**
 
@@ -2549,7 +2746,41 @@ export function ServiceCard({ service }: ServiceCardProps) {
 }
 ```
 
-- [ ] **Step 3: Crear la página del escaparate**
+- [ ] **Step 3: Crear la galería de fotos**
+
+Crea `src/app/(public)/[slug]/components/ImageGallery.tsx`:
+
+```tsx
+export interface ImageGalleryProps {
+  imageUrls: string[];
+  businessName: string;
+}
+
+export function ImageGallery({ imageUrls, businessName }: ImageGalleryProps) {
+  if (imageUrls.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-2">
+      {imageUrls.map((url, index) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={url}
+          src={url}
+          alt={`${businessName} — foto ${index + 1}`}
+          className="h-48 w-72 shrink-0 snap-start rounded-[var(--radius-theme)] object-cover shadow-[var(--shadow-theme)]"
+          loading={index === 0 ? 'eager' : 'lazy'}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+Nota: carrusel horizontal nativo con `overflow-x-auto` + `snap-x` (sin librería extra) — mobile-first, funciona igual con 1, 2 o 3 fotos.
+
+- [ ] **Step 4: Crear la página del escaparate**
 
 Crea `src/app/(public)/[slug]/page.tsx`:
 
@@ -2561,6 +2792,7 @@ import { getPublicBusinessBySlug } from '@/lib/public/business-lookup';
 import { getThemeCssVariables } from '@/lib/theme/theme';
 import { BookingLauncherProvider } from './components/BookingLauncherProvider';
 import { ServiceCard } from './components/ServiceCard';
+import { ImageGallery } from './components/ImageGallery';
 
 export default async function BusinessPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -2596,8 +2828,10 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
           {business.address && <p className="mt-2 text-sm text-[var(--color-text-muted)]">{business.address}</p>}
         </header>
 
+        <ImageGallery imageUrls={business.imageUrls} businessName={business.name} />
+
         <main className="mx-auto max-w-2xl px-6 pb-16">
-          <section className="mb-10">
+          <section className="mb-10 mt-10">
             <h2 className="mb-4 font-[family-name:var(--font-heading)] text-xl font-semibold">Servicios</h2>
             <div className="flex flex-col gap-4">
               {business.services.map((service) => (
@@ -2631,7 +2865,7 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
 }
 ```
 
-- [ ] **Step 4: Crear la página 404 amable para negocio inexistente o inactivo**
+- [ ] **Step 5: Crear la página 404 amable para negocio inexistente o inactivo**
 
 Crea `src/app/(public)/[slug]/not-found.tsx`:
 
@@ -2651,7 +2885,7 @@ export default function NegocioNoEncontrado() {
 
 Nota: usa colores fijos (Boutique editorial) a propósito — es la única pantalla pública sin negocio conocido, así que no hay tema que aplicar.
 
-- [ ] **Step 5: Arrancar el entorno de desarrollo y verificar visualmente**
+- [ ] **Step 6: Arrancar el entorno de desarrollo y verificar visualmente**
 
 ```powershell
 pnpm exec supabase start
@@ -2659,11 +2893,11 @@ pnpm db:seed
 pnpm dev
 ```
 
-Visita `http://localhost:3000/salon-aura` en el navegador. Expected: se ve la cabecera "Salón Aura" con la serif del preset (Playfair Display en los títulos, Lora en el cuerpo — nada debe renderizar en Arial), la lista de 4 servicios con precio/duración, el equipo (Marta Ruiz, Carlos Núñez), y al pulsar "Reservar" en cualquier servicio se abre la hoja inferior animada con el paso "¿Con quién quieres tu cita?". Visita `http://localhost:3000/no-existe`: Expected: página amable "Vaya, no encontramos este negocio".
+Visita `http://localhost:3000/salon-aura` en el navegador. Expected: se ve la cabecera "Salón Aura" con la serif del preset (Playfair Display en los títulos, Lora en el cuerpo — nada debe renderizar en Arial), la galería con las 3 fotos de muestra desplazable horizontalmente, la lista de 4 servicios con precio/duración, el equipo (Marta Ruiz, Carlos Núñez), y al pulsar "Reservar" en cualquier servicio se abre la hoja inferior animada con el paso "¿Con quién quieres tu cita?". Visita `http://localhost:3000/no-existe`: Expected: página amable "Vaya, no encontramos este negocio".
 
-Al terminar la verificación, **para el servidor dev con Ctrl+C** (la Tarea 14 exige el puerto 3000 libre: su e2e arranca su propio servidor apuntando a la BD de test).
+Al terminar la verificación, **para el servidor dev con Ctrl+C** (la Tarea 16 exige el puerto 3000 libre: su e2e arranca su propio servidor apuntando a la BD de test).
 
-- [ ] **Step 6: Comprobar que el build de producción funciona**
+- [ ] **Step 7: Comprobar que el build de producción funciona**
 
 ```powershell
 pnpm build
@@ -2671,23 +2905,170 @@ pnpm build
 
 Expected: termina con `✓ Compiled successfully` y lista `/[slug]` entre las rutas.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```powershell
-git add "src/app/(public)/[slug]/components/BookingLauncherProvider.tsx" "src/app/(public)/[slug]/components/ServiceCard.tsx" "src/app/(public)/[slug]/page.tsx" "src/app/(public)/[slug]/not-found.tsx"
-git commit -m "feat(public): escaparate /{slug} con cabecera, servicios, equipo y apertura de la hoja"
+git add "src/app/(public)/[slug]/components/BookingLauncherProvider.tsx" "src/app/(public)/[slug]/components/ServiceCard.tsx" "src/app/(public)/[slug]/components/ImageGallery.tsx" "src/app/(public)/[slug]/page.tsx" "src/app/(public)/[slug]/not-found.tsx"
+git commit -m "feat(public): escaparate /{slug} con cabecera, galería de fotos, servicios, equipo y apertura de la hoja"
 ```
 
 ---
 
-### Tarea 12: Página `/confirmar/{token}`
+### Tarea 13: Generación de archivo `.ics` para añadir la cita al calendario
+
+**Modelo sugerido:** haiku
+
+**Files:**
+- Create: `src/lib/public/ics.ts`
+- Test: `src/lib/public/ics.test.ts`
+
+**Interfaces:**
+- Consumes: nada de tareas anteriores (función pura, sin Prisma).
+- Produces: `IcsAppointmentInput = { uid: string; businessName: string; serviceName: string; employeeName: string; address?: string | null; start: Date; end: Date; now?: Date }`, `generateAppointmentIcs(input: IcsAppointmentInput): string`. Usado por la Tarea 14 (página `/confirmar/{token}`) para el enlace "Añadir a mi calendario".
+
+- [ ] **Step 1: Escribir los tests**
+
+Crea `src/lib/public/ics.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { generateAppointmentIcs } from './ics';
+
+const baseInput = {
+  uid: 'appt-123@appoint.example',
+  businessName: 'Salón Aura',
+  serviceName: 'Corte de mujer',
+  employeeName: 'Marta Ruiz',
+  address: 'Calle Mayor 10, Madrid',
+  start: new Date('2026-07-14T08:00:00.000Z'),
+  end: new Date('2026-07-14T08:45:00.000Z'),
+  now: new Date('2026-07-13T08:00:00.000Z'),
+};
+
+describe('generateAppointmentIcs', () => {
+  it('genera un VEVENT válido con las fechas en UTC sin separadores', () => {
+    const ics = generateAppointmentIcs(baseInput);
+
+    expect(ics).toContain('BEGIN:VCALENDAR');
+    expect(ics).toContain('BEGIN:VEVENT');
+    expect(ics).toContain('UID:appt-123@appoint.example');
+    expect(ics).toContain('DTSTAMP:20260713T080000Z');
+    expect(ics).toContain('DTSTART:20260714T080000Z');
+    expect(ics).toContain('DTEND:20260714T084500Z');
+    expect(ics).toContain('END:VEVENT');
+    expect(ics).toContain('END:VCALENDAR');
+  });
+
+  it('incluye el resumen con el servicio y el negocio', () => {
+    const ics = generateAppointmentIcs(baseInput);
+    expect(ics).toContain('SUMMARY:Corte de mujer — Salón Aura');
+  });
+
+  it('incluye LOCATION cuando hay dirección y la omite si no hay', () => {
+    const withAddress = generateAppointmentIcs(baseInput);
+    expect(withAddress).toContain('LOCATION:Calle Mayor 10\\, Madrid');
+
+    const withoutAddress = generateAppointmentIcs({ ...baseInput, address: null });
+    expect(withoutAddress).not.toContain('LOCATION:');
+  });
+
+  it('escapa comas y punto y coma en los campos de texto', () => {
+    const ics = generateAppointmentIcs({ ...baseInput, businessName: 'Salón; Aura, S.L.' });
+    expect(ics).toContain('Salón\\; Aura\\, S.L.');
+  });
+
+  it('usa saltos de línea CRLF (RFC 5545)', () => {
+    const ics = generateAppointmentIcs(baseInput);
+    expect(ics.includes('\r\n')).toBe(true);
+    expect(ics.split('\r\n').length).toBeGreaterThan(5);
+  });
+});
+```
+
+- [ ] **Step 2: Ejecutar los tests y comprobar que fallan**
+
+```powershell
+pnpm test ics.test.ts
+```
+
+Expected: falla con `Cannot find module './ics'` (el archivo `ics.ts` aún no existe).
+
+- [ ] **Step 3: Implementar `src/lib/public/ics.ts`**
+
+```typescript
+export interface IcsAppointmentInput {
+  uid: string;
+  businessName: string;
+  serviceName: string;
+  employeeName: string;
+  address?: string | null;
+  start: Date;
+  end: Date;
+  now?: Date;
+}
+
+function formatIcsDateUtc(date: Date): string {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
+
+function escapeIcsText(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+export function generateAppointmentIcs(input: IcsAppointmentInput): string {
+  const now = input.now ?? new Date();
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Appoint//Reservas//ES',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${input.uid}`,
+    `DTSTAMP:${formatIcsDateUtc(now)}`,
+    `DTSTART:${formatIcsDateUtc(input.start)}`,
+    `DTEND:${formatIcsDateUtc(input.end)}`,
+    `SUMMARY:${escapeIcsText(`${input.serviceName} — ${input.businessName}`)}`,
+    `DESCRIPTION:${escapeIcsText(`Cita con ${input.employeeName} en ${input.businessName}.`)}`,
+  ];
+
+  if (input.address) {
+    lines.push(`LOCATION:${escapeIcsText(input.address)}`);
+  }
+
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+
+  return lines.join('\r\n') + '\r\n';
+}
+```
+
+- [ ] **Step 4: Ejecutar los tests y comprobar que pasan**
+
+```powershell
+pnpm test ics.test.ts
+```
+
+Expected: `5 passed`.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add src/lib/public/ics.ts src/lib/public/ics.test.ts
+git commit -m "feat(public): genera archivo .ics para añadir la cita al calendario"
+```
+
+---
+
+### Tarea 14: Página `/confirmar/{token}` con resumen y descarga de `.ics`
+
+**Modelo sugerido:** haiku
 
 **Files:**
 - Create: `src/app/(public)/confirmar/[token]/page.tsx`
 
 **Interfaces:**
-- Consumes: `confirmAppointment` de `@/lib/booking/tokens`; `getConfirmErrorMessage` de `@/lib/public/error-messages` (Tarea 4); `getAppointmentByConfirmToken` de `@/lib/public/appointment-lookup` (Tarea 6); `getPublicBusinessBySlug` de `@/lib/public/business-lookup` (Tarea 6); `getThemeCssVariables` de `@/lib/theme/theme` (Tarea 1); `formatAppointmentDateTime` de `@/lib/public/format-datetime` (Tarea 2); `prisma` de `@/lib/db`.
-- Produces: ruta pública `/confirmar/{token}` que confirma la cita al cargar la página (visitar el enlace del email de Fase 4 ejecuta la confirmación) y enlaza a `/cita/{cancelToken}`.
+- Consumes: `confirmAppointment` de `@/lib/booking/tokens`; `getConfirmErrorMessage` de `@/lib/public/error-messages` (Tarea 4); `getAppointmentByConfirmToken` de `@/lib/public/appointment-lookup` (Tarea 6); `getPublicBusinessBySlug` de `@/lib/public/business-lookup` (Tarea 6); `getThemeCssVariables` de `@/lib/theme/theme` (Tarea 1); `formatAppointmentDateTime` de `@/lib/public/format-datetime` (Tarea 2); `generateAppointmentIcs` de `@/lib/public/ics` (Tarea 13); `prisma` de `@/lib/db`.
+- Produces: ruta pública `/confirmar/{token}` que confirma la cita al cargar la página (visitar el enlace del email de Fase 4 ejecuta la confirmación), enlaza a `/cita/{cancelToken}` y ofrece un enlace de descarga `cita.ics`.
 
 - [ ] **Step 1: Crear la página de confirmación**
 
@@ -2703,6 +3084,7 @@ import { getAppointmentByConfirmToken } from '@/lib/public/appointment-lookup';
 import { getPublicBusinessBySlug } from '@/lib/public/business-lookup';
 import { getThemeCssVariables } from '@/lib/theme/theme';
 import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
+import { generateAppointmentIcs } from '@/lib/public/ics';
 
 export default async function ConfirmarPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -2721,6 +3103,20 @@ export default async function ConfirmarPage({ params }: { params: Promise<{ toke
   const business = summary ? await getPublicBusinessBySlug(prisma, summary.businessSlug) : null;
   const theme = business ? getThemeCssVariables(business) : {};
 
+  const icsDataUrl = summary
+    ? `data:text/calendar;charset=utf-8,${encodeURIComponent(
+        generateAppointmentIcs({
+          uid: `${summary.id}@appoint.app`,
+          businessName: summary.businessName,
+          serviceName: summary.serviceName,
+          employeeName: summary.employeeName,
+          address: business?.address ?? null,
+          start: summary.start,
+          end: summary.end,
+        })
+      )}`
+    : null;
+
   return (
     <main
       style={{ ...theme, fontFamily: 'var(--font-body, var(--font-lora))' } as CSSProperties}
@@ -2736,6 +3132,16 @@ export default async function ConfirmarPage({ params }: { params: Promise<{ toke
             Con {summary.employeeName} · {summary.businessName}
           </p>
         </div>
+      )}
+
+      {icsDataUrl && (
+        <a
+          href={icsDataUrl}
+          download="cita.ics"
+          className="rounded-[var(--radius-theme,0.5rem)] bg-[var(--color-accent,#B25539)] px-4 py-2 text-sm font-semibold text-[var(--color-accent-contrast,#fff)]"
+        >
+          Añadir a mi calendario
+        </a>
       )}
 
       {summary && (
@@ -2762,9 +3168,9 @@ pnpm exec tsx -e 'import { prisma } from "./src/lib/db"; prisma.appointment.find
 
 (Comillas simples de PowerShell a propósito: no interpolan, así que `$disconnect` llega literal a tsx.)
 
-Si no hay ninguna cita, crea una reservando desde `http://localhost:3000/salon-aura` primero. Visita `http://localhost:3000/confirmar/<token>`. Expected: "¡Cita confirmada!" con el resumen del servicio, la fecha en español y el enlace "Ver o cancelar mi cita". Vuelve a visitar la misma URL: Expected: "No hemos podido confirmar tu cita" con el mensaje de `INVALID_STATE`.
+Si no hay ninguna cita, crea una reservando desde `http://localhost:3000/salon-aura` primero. Visita `http://localhost:3000/confirmar/<token>`. Expected: "¡Cita confirmada!" con el resumen del servicio, la fecha en español, el botón "Añadir a mi calendario" (descarga `cita.ics` — ábrelo con un editor de texto y comprueba que empieza por `BEGIN:VCALENDAR` y contiene `DTSTART`/`DTEND`) y el enlace "Ver o cancelar mi cita". Vuelve a visitar la misma URL: Expected: "No hemos podido confirmar tu cita" con el mensaje de `INVALID_STATE`.
 
-Al terminar la verificación, **para el servidor dev con Ctrl+C** (la Tarea 14 exige el puerto 3000 libre).
+Al terminar la verificación, **para el servidor dev con Ctrl+C** (la Tarea 16 exige el puerto 3000 libre).
 
 - [ ] **Step 3: Comprobar que el build funciona**
 
@@ -2778,19 +3184,21 @@ Expected: `✓ Compiled successfully`, incluye `/confirmar/[token]` en la lista 
 
 ```powershell
 git add "src/app/(public)/confirmar/[token]/page.tsx"
-git commit -m "feat(public): página /confirmar/{token}"
+git commit -m "feat(public): página /confirmar/{token} con resumen y descarga de .ics"
 ```
 
 ---
 
-### Tarea 13: Página `/cita/{token}` (ver y cancelar)
+### Tarea 15: Página `/cita/{token}` (ver y cancelar)
+
+**Modelo sugerido:** haiku
 
 **Files:**
 - Create: `src/app/(public)/cita/[token]/actions.ts`, `src/app/(public)/cita/[token]/page.tsx`
 
 **Interfaces:**
 - Consumes: `cancelAppointment` de `@/lib/booking/tokens`; `getAppointmentByCancelToken` de `@/lib/public/appointment-lookup` (Tarea 6); `getPublicBusinessBySlug` de `@/lib/public/business-lookup` (Tarea 6); `getThemeCssVariables` de `@/lib/theme/theme` (Tarea 1); `formatAppointmentDateTime` de `@/lib/public/format-datetime` (Tarea 2); `prisma` de `@/lib/db`.
-- Produces: ruta pública `/cita/{token}` con vista de estado + botón de cancelar; `cancelAppointmentAction(token: string): Promise<void>` — Server Action consumida por Playwright (Tarea 14) a través del formulario de la página.
+- Produces: ruta pública `/cita/{token}` con vista de estado + botón de cancelar; `cancelAppointmentAction(token: string): Promise<void>` — Server Action consumida por Playwright (Tarea 16) a través del formulario de la página.
 
 - [ ] **Step 1: Crear la Server Action de cancelación**
 
@@ -2884,9 +3292,9 @@ export default async function CitaPage({ params }: { params: Promise<{ token: st
 pnpm dev
 ```
 
-Reserva una cita desde `http://localhost:3000/salon-aura`, copia el `cancelToken` de la BD (mismo procedimiento que en la Tarea 12) y visita `http://localhost:3000/cita/<token>`. Expected: se ve el resumen de la cita, el estado "Tu cita está pendiente de confirmación." y el botón "Cancelar cita". Púlsalo. Expected: la página se recarga y muestra "Esta cita está cancelada." sin el botón.
+Reserva una cita desde `http://localhost:3000/salon-aura`, copia el `cancelToken` de la BD (mismo procedimiento que en la Tarea 14) y visita `http://localhost:3000/cita/<token>`. Expected: se ve el resumen de la cita, el estado "Tu cita está pendiente de confirmación." y el botón "Cancelar cita". Púlsalo. Expected: la página se recarga y muestra "Esta cita está cancelada." sin el botón.
 
-Al terminar la verificación, **para el servidor dev con Ctrl+C** (la Tarea 14 exige el puerto 3000 libre: su `playwright.config.ts` usa `reuseExistingServer: false` y arranca su propio servidor apuntando a la BD de test).
+Al terminar la verificación, **para el servidor dev con Ctrl+C** (la Tarea 16 exige el puerto 3000 libre: su `playwright.config.ts` usa `reuseExistingServer: false` y arranca su propio servidor apuntando a la BD de test).
 
 - [ ] **Step 4: Comprobar que el build funciona**
 
@@ -2905,14 +3313,16 @@ git commit -m "feat(public): página /cita/{token} para ver y cancelar una cita"
 
 ---
 
-### Tarea 14: Configurar Playwright y test e2e reservar → confirmar → cancelar
+### Tarea 16: Configurar Playwright y test e2e reservar → confirmar → cancelar
+
+**Modelo sugerido:** sonnet (configuración de entorno: servidor de test, migraciones, variables de entorno — requiere juicio)
 
 **Files:**
 - Create: `playwright.config.ts`, `e2e/global-setup.ts`, `e2e/booking-flow.spec.ts`
 - Modify: `package.json` (script `test:e2e`), `.gitignore`
 
 **Interfaces:**
-- Consumes: `seedDemoBusiness` de `src/lib/seed/demo-business`; `PrismaClient` de `@prisma/client`; toda la UI de las Tareas 8-13 (a través de peticiones HTTP reales).
+- Consumes: `seedDemoBusiness` de `src/lib/seed/demo-business`; `PrismaClient` de `@prisma/client`; toda la UI de las Tareas 9-15 (a través de peticiones HTTP reales).
 - Produces: `pnpm test:e2e` ejecuta el flujo completo reservar → confirmar → cancelar contra `TEST_DATABASE_URL` con el servidor de desarrollo apuntando a esa misma base de datos (no toca la base de datos de desarrollo `DATABASE_URL`).
 
 - [ ] **Step 1: Instalar Playwright**
@@ -3143,12 +3553,16 @@ src/lib/public/slots-service.ts
 src/lib/public/slots-service.test.ts
 src/lib/public/booking-service.ts
 src/lib/public/booking-service.test.ts
+src/lib/public/ics.ts
+src/lib/public/ics.test.ts
+prisma/migrations/<timestamp>_add_business_image_urls/migration.sql
 src/app/(public)/layout.tsx
 src/app/(public)/[slug]/actions.ts
 src/app/(public)/[slug]/page.tsx
 src/app/(public)/[slug]/not-found.tsx
 src/app/(public)/[slug]/components/BookingLauncherProvider.tsx
 src/app/(public)/[slug]/components/ServiceCard.tsx
+src/app/(public)/[slug]/components/ImageGallery.tsx
 src/app/(public)/[slug]/components/booking-sheet/BookingSheet.tsx
 src/app/(public)/[slug]/components/booking-sheet/StepEmployee.tsx
 src/app/(public)/[slug]/components/booking-sheet/StepDateTime.tsx
@@ -3162,3 +3576,5 @@ playwright.config.ts
 e2e/global-setup.ts
 e2e/booking-flow.spec.ts
 ```
+
+Archivos modificados (no nuevos): `prisma/schema.prisma` (campo `imageUrls` en `Business`, Tarea 8), `src/lib/seed/demo-business.ts` (fotos de muestra, Tarea 8), `src/lib/public/business-lookup.ts` (expone `imageUrls`, Tarea 8).
