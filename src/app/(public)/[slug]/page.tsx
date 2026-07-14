@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { getPublicBusinessBySlug } from '@/lib/public/business-lookup';
-import { getThemeCssVariables } from '@/lib/theme/theme';
+import { getThemeCssVariables, getContrastTextColor } from '@/lib/theme/theme';
 import { BookingLauncherProvider } from './components/BookingLauncherProvider';
 import { ServiceCard } from './components/ServiceCard';
 import { ImageGallery } from './components/ImageGallery';
@@ -70,8 +70,8 @@ export default async function BusinessPage({ params }: { params: Promise<{ slug:
                 {business.employees.map((employee) => (
                   <div key={employee.id} className="flex flex-col items-center gap-2">
                     <div
-                      className="flex h-16 w-16 items-center justify-center rounded-full text-lg font-semibold text-white shadow-[var(--shadow-theme)] ring-2 ring-[var(--color-surface)]"
-                      style={{ backgroundColor: employee.color }}
+                      className="flex h-16 w-16 items-center justify-center rounded-full text-lg font-semibold shadow-[var(--shadow-theme)] ring-2 ring-[var(--color-surface)]"
+                      style={{ backgroundColor: employee.color, color: getContrastTextColor(employee.color) }}
                     >
                       {employee.name.charAt(0)}
                     </div>
