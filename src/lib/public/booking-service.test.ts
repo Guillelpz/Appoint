@@ -99,11 +99,39 @@ describe('bookAppointmentBySlug', () => {
       attempt('+34699000005', 'carrera-servicio-b@example.com'),
     ]);
 
-    const failed = [resultA, resultB].find((r) => !r.ok);
-    expect(failed).toBeDefined();
-    if (failed && !failed.ok) {
-      expect(failed.message).toBe('Vaya, ese hueco se acaba de ocupar. Te proponemos otras horas disponibles:');
-      expect(failed.alternativeSlots.length).toBeGreaterThan(0);
+    const results = [resultA, resultB];
+    const succeeded = results.filter((r) => r.ok);
+    const failed = results.filter((r) => !r.ok);
+
+    // El hueco solo puede acabar ocupado por una de las dos peticiones (la
+    // otra siempre pierde: al menos una comprobación previa de disponibilidad
+    // se ejecuta antes de que cualquiera confirme, así que siempre hay un
+    // ganador y un perdedor).
+    expect(succeeded.length).toBe(1);
+    expect(failed.length).toBe(1);
+
+    const loser = failed[0];
+    if (!loser.ok) {
+      // La petición perdedora puede recibir dos motivos igual de legítimos
+      // según el entrelazado real de E/S entre las dos conexiones
+      // concurrentes (no es determinista y no se puede forzar desde el test):
+      // - SLOT_TAKEN: ambas superan la comprobación previa de disponibilidad
+      //   antes de que cualquiera confirme, y la red de seguridad del índice
+      //   único (employeeId, start) en createAppointment detecta el choque en
+      //   el INSERT. bookAppointmentBySlug calcula entonces huecos
+      //   alternativos ese mismo día.
+      // - EMPLOYEE_UNAVAILABLE: la petición perdedora se retrasa lo bastante
+      //   como para que su propia comprobación previa de disponibilidad
+      //   (fuera de la transacción) se ejecute después de que la otra ya
+      //   haya confirmado la cita, así que ve el hueco como ya ocupado antes
+      //   de intentar el INSERT. No lleva huecos alternativos: solo se
+      //   calculan para SLOT_TAKEN (ver booking-service.ts).
+      if (loser.message === 'Vaya, ese hueco se acaba de ocupar. Te proponemos otras horas disponibles:') {
+        expect(loser.alternativeSlots.length).toBeGreaterThan(0);
+      } else {
+        expect(loser.message).toBe('Ese profesional ya no tiene disponible este hueco. Elige otro horario o profesional.');
+        expect(loser.alternativeSlots).toEqual([]);
+      }
     }
   });
 
