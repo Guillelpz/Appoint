@@ -49,4 +49,21 @@ describe('generateAppointmentIcs', () => {
     expect(ics.includes('\r\n')).toBe(true);
     expect(ics.split('\r\n').length).toBeGreaterThan(5);
   });
+
+  it('pliega las líneas de más de 75 octetos con CRLF + espacio inicial (RFC 5545 §3.1)', () => {
+    const ics = generateAppointmentIcs({
+      ...baseInput,
+      address:
+        'Avenida de la Constitución Española 1234, Edificio Los Almendros, Planta Baja, Local 7, 28001 Madrid, España',
+    });
+
+    const lines = ics.split('\r\n');
+    for (const line of lines) {
+      expect(Buffer.byteLength(line, 'utf8')).toBeLessThanOrEqual(75);
+    }
+
+    const continuationIndex = lines.findIndex((line) => line.startsWith(' '));
+    expect(continuationIndex).toBeGreaterThan(0);
+    expect(Buffer.byteLength(lines[continuationIndex - 1], 'utf8')).toBeLessThanOrEqual(75);
+  });
 });

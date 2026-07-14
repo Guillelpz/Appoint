@@ -17,6 +17,34 @@ function escapeIcsText(text: string): string {
   return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
+const ICS_MAX_LINE_OCTETS = 75;
+const icsEncoder = new TextEncoder();
+
+function foldIcsLine(line: string): string {
+  if (icsEncoder.encode(line).length <= ICS_MAX_LINE_OCTETS) {
+    return line;
+  }
+
+  const folded: string[] = [];
+  let current = '';
+  let currentOctets = 0;
+
+  // Iterar por code points evita partir un carácter UTF-8 multibyte por la mitad.
+  for (const char of line) {
+    const charOctets = icsEncoder.encode(char).length;
+    if (currentOctets + charOctets > ICS_MAX_LINE_OCTETS) {
+      folded.push(current);
+      current = ' ';
+      currentOctets = 1;
+    }
+    current += char;
+    currentOctets += charOctets;
+  }
+
+  folded.push(current);
+  return folded.join('\r\n');
+}
+
 export function generateAppointmentIcs(input: IcsAppointmentInput): string {
   const now = input.now ?? new Date();
 
@@ -40,5 +68,5 @@ export function generateAppointmentIcs(input: IcsAppointmentInput): string {
 
   lines.push('END:VEVENT', 'END:VCALENDAR');
 
-  return lines.join('\r\n') + '\r\n';
+  return lines.map(foldIcsLine).join('\r\n') + '\r\n';
 }
