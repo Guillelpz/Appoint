@@ -1,6 +1,9 @@
 import type { CreateAppointmentFailureReason } from '@/lib/booking/create-appointment';
 import type { ConfirmAppointmentFailureReason, CancelAppointmentFailureReason } from '@/lib/booking/tokens';
 
+export const INVALID_INPUT_MESSAGE =
+  'Revisa tus datos: necesitamos tu nombre y un teléfono y un email válidos para reservar.';
+
 export function getBookingErrorMessage(reason: CreateAppointmentFailureReason): string {
   switch (reason) {
     case 'RATE_LIMITED':

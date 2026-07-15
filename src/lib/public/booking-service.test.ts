@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
 import { bookAppointmentBySlug } from './booking-service';
+import { INVALID_INPUT_MESSAGE } from './error-messages';
 
 const NOW = new Date('2026-07-13T08:00:00.000Z');
 const VALID_START = new Date('2026-07-14T08:00:00.000Z');
@@ -155,5 +156,56 @@ describe('bookAppointmentBySlug', () => {
       message: 'No encontramos este negocio. Puede que el enlace ya no esté disponible.',
       alternativeSlots: [],
     });
+  });
+
+  it('rechaza un email malformado sin crear ningún cliente nuevo', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const customersBefore = await prisma.customer.count({ where: { businessId: seed.business.id } });
+
+    const result = await bookAppointmentBySlug(prisma, {
+      slug: 'salon-aura',
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente inválido',
+      customerPhone: '+34699000007',
+      customerEmail: 'no-es-un-email',
+      ipAddress: '198.51.100.65',
+      now: NOW,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: INVALID_INPUT_MESSAGE,
+      alternativeSlots: [],
+    });
+
+    const customersAfter = await prisma.customer.count({ where: { businessId: seed.business.id } });
+    expect(customersAfter).toBe(customersBefore);
+  });
+
+  it('normaliza espacios y mayúsculas en los datos del cliente antes de persistir', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await bookAppointmentBySlug(prisma, {
+      slug: 'salon-aura',
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: '  Cliente Normalizado  ',
+      customerPhone: '+34 699 00-00-08',
+      customerEmail: 'Normalizado@Example.com',
+      ipAddress: '198.51.100.66',
+      now: NOW,
+    });
+
+    expect(result.ok).toBe(true);
+
+    const customer = await prisma.customer.findUnique({
+      where: { businessId_email: { businessId: seed.business.id, email: 'normalizado@example.com' } },
+    });
+    expect(customer).not.toBeNull();
+    expect(customer?.phone).toBe('+34699000008');
+    expect(customer?.email).toBe('normalizado@example.com');
   });
 });

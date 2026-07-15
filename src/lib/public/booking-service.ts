@@ -1,8 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
 import { createAppointment } from '@/lib/booking/create-appointment';
 import { getLocalDateString } from '@/lib/booking/timezone';
-import { getBookingErrorMessage } from './error-messages';
+import { getBookingErrorMessage, INVALID_INPUT_MESSAGE } from './error-messages';
 import { getAvailableSlotsForBusiness } from './slots-service';
+import { validateBookingInput } from './validate-booking-input';
 
 export interface BookAppointmentBySlugInput {
   slug: string;
@@ -25,6 +26,17 @@ export async function bookAppointmentBySlug(
   input: BookAppointmentBySlugInput
 ): Promise<BookAppointmentBySlugResult> {
   const now = input.now ?? new Date();
+
+  const validation = validateBookingInput({
+    customerName: input.customerName,
+    customerPhone: input.customerPhone,
+    customerEmail: input.customerEmail,
+    start: input.start,
+  });
+  if (!validation.ok) {
+    return { ok: false, message: INVALID_INPUT_MESSAGE, alternativeSlots: [] };
+  }
+
   const business = await prisma.business.findUnique({ where: { slug: input.slug } });
 
   if (!business || !business.active) {
@@ -36,9 +48,9 @@ export async function bookAppointmentBySlug(
     serviceId: input.serviceId,
     employeeId: input.employeeId,
     start: input.start,
-    customerName: input.customerName,
-    customerPhone: input.customerPhone,
-    customerEmail: input.customerEmail,
+    customerName: validation.value.customerName,
+    customerPhone: validation.value.customerPhone,
+    customerEmail: validation.value.customerEmail,
     source: 'WEB',
     ipAddress: input.ipAddress,
     now,
