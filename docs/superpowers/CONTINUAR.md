@@ -1,11 +1,10 @@
 # Continuación del proyecto — estado y siguientes pasos
 
-_Actualizado: 2026-07-16 tras completar la Fase 3 (página pública) en la rama `worktree-fase-3-pagina-publica`._
+_Actualizado: 2026-07-16 tras completar la Fase 3 (página pública) y mergearla a `main`._
 
 ## Estado actual
 
-- **Hecho y en `main`** (merge `6492edb`): Fase 1 (fundación) y Fase 2 (motor de reservas).
-- **Fase 3 completa** en la rama `worktree-fase-3-pagina-publica`, publicada en origin (abrir PR/merge pendiente de decisión del usuario; `gh` no está instalado en la máquina): theming (3 presets con variables CSS por negocio), escaparate `/{slug}` (cabecera, galería, servicios, equipo), hoja inferior de reserva con GSAP (servicio → profesional/"cualquiera" → día/hora → datos → confirmar), Server Actions sobre `src/lib/booking/`, `/confirmar/{token}` con descarga `.ics`, `/cita/{token}` con cancelación, y e2e Playwright reservar→confirmar→cancelar.
+- **Hecho y en `main`**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`) y **Fase 3 mergeada el 2026-07-16** (`gh` CLI no está instalado en la máquina; el merge se hizo con git directo, sin PR): theming (3 presets con variables CSS por negocio), escaparate `/{slug}` (cabecera, galería, servicios, equipo), hoja inferior de reserva con GSAP (servicio → profesional/"cualquiera" → día/hora → datos → confirmar), Server Actions sobre `src/lib/booking/`, `/confirmar/{token}` con descarga `.ics`, `/cita/{token}` con cancelación, y e2e Playwright reservar→confirmar→cancelar.
 - **Verificación**: 140 tests Vitest contra Postgres real + 1 e2e Playwright + lint + build, todo en verde (2026-07-16).
 - **Revisión global de rama (opus)**: veredicto _Ready to merge_. El único hallazgo Important (falta de validación server-side de los datos del cliente) se corrigió en `e8cfdaa` (`validate-booking-input.ts`: valida y normaliza nombre/teléfono/email/fecha antes de tocar la BD).
 - **Proceso usado**: superpowers — writing-plans → subagent-driven-development (ledger en `.superpowers/sdd/progress.md`, gitignorado; si no existe, este documento es la fuente de verdad).
