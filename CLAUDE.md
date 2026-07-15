@@ -4,9 +4,9 @@ SaaS multi-tenant de gestión de citas para negocios locales (peluquerías, clí
 
 ## Documentos clave
 
-- **⭐ Estado y siguientes pasos:** `docs/superpowers/CONTINUAR.md` — LEE ESTO PRIMERO al retomar el proyecto; dice qué está hecho, qué toca ahora (Fase 3: página pública) y los avisos técnicos del motor.
+- **⭐ Estado y siguientes pasos:** `docs/superpowers/CONTINUAR.md` — LEE ESTO PRIMERO al retomar el proyecto; dice qué está hecho, qué toca ahora (Fase 4: emails) y los avisos técnicos acumulados.
 - **Especificación aprobada:** `docs/superpowers/specs/2026-07-12-appoint-design.md` — todas las decisiones validadas con el usuario.
-- **Planes de implementación:** `docs/superpowers/plans/` (el de Fases 1-2 ya ejecutado y mergeado).
+- **Planes de implementación:** `docs/superpowers/plans/` (Fases 1-2 y Fase 3 ya ejecutados).
 
 ## Stack
 
@@ -29,7 +29,8 @@ SaaS multi-tenant de gestión de citas para negocios locales (peluquerías, clí
 ## Comandos
 
 - `pnpm exec supabase start` — levantar Postgres local (Docker Desktop activo; BD dev en 127.0.0.1:54322, BD de tests `appoint_test`). Necesario antes de test/dev.
-- `pnpm test` — Vitest contra Postgres real (`TEST_DATABASE_URL`); 63 tests. `fileParallelism` desactivado a propósito (BD compartida): no lo reactives.
+- `pnpm test` — Vitest contra Postgres real (`TEST_DATABASE_URL`); 140 tests. `fileParallelism` desactivado a propósito (BD compartida): no lo reactives.
+- `pnpm exec playwright test` — e2e (reservar→confirmar→cancelar); levanta su propio servidor Next contra `appoint_test`.
 - `pnpm dev` / `pnpm build` / `pnpm lint` — Next.js (dev con turbopack; build sin él, a propósito).
 - `pnpm exec prisma migrate dev` / `pnpm db:seed` — migraciones y seed demo ("Salón Aura").
 - `.env` no versionado: copiar de `.env.example` (valores de Supabase local ya válidos).
