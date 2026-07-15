@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import path from 'node:path';
 
 export default defineConfig({
@@ -9,6 +9,9 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     testTimeout: 15000,
     hookTimeout: 30000,
+    // e2e/ contiene specs de Playwright (test.afterAll de @playwright/test
+    // choca con el runner de Vitest si se recogen aquí).
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
   resolve: {
     alias: {

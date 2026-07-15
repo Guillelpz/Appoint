@@ -27,6 +27,11 @@ export async function seedDemoBusiness(prisma: PrismaClient): Promise<DemoBusine
       email: 'hola@salonaura.example',
       themePreset: ThemePreset.BOUTIQUE_EDITORIAL,
       accentColor: '#B25539',
+      imageUrls: [
+        'https://picsum.photos/seed/salon-aura-1/1200/800',
+        'https://picsum.photos/seed/salon-aura-2/1200/800',
+        'https://picsum.photos/seed/salon-aura-3/1200/800',
+      ],
       manualApproval: false,
       slotGranularityMinutes: 15,
       minAdvanceNoticeMinutes: 60,

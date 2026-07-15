@@ -275,7 +275,17 @@ describe('createAppointment', () => {
     expect(succeeded.length).toBe(1);
     expect(failed.length).toBe(1);
     if (!failed[0].ok) {
-      expect(failed[0].reason).toBe('SLOT_TAKEN');
+      // La petición perdedora puede recibir dos motivos igual de legítimos
+      // según el entrelazado real de E/S entre las dos conexiones
+      // concurrentes (no es determinista y no se puede forzar desde el test):
+      // - SLOT_TAKEN: ambas superan la comprobación previa de disponibilidad
+      //   antes de que cualquiera confirme, y la red de seguridad del índice
+      //   único (employeeId, start) detecta el choque en el INSERT.
+      // - EMPLOYEE_UNAVAILABLE: la perdedora se retrasa lo bastante como para
+      //   que su propia comprobación previa de disponibilidad (fuera de la
+      //   transacción) se ejecute después de que la otra ya haya confirmado,
+      //   así que ve el hueco ocupado antes de intentar el INSERT.
+      expect(['SLOT_TAKEN', 'EMPLOYEE_UNAVAILABLE']).toContain(failed[0].reason);
     }
   });
 

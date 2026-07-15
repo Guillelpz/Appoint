@@ -52,6 +52,7 @@ model Business {
   themePreset             ThemePreset  @default(BOUTIQUE_EDITORIAL)
   accentColor             String       @default("#B25539")
   logoUrl                 String?
+  imageUrls               String[]     @default([])
   maxBookingWindowDays    Int          @default(30)
   minAdvanceNoticeMinutes Int          @default(60)
   cancellationPolicy      String?
