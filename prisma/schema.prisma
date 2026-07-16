@@ -180,6 +180,8 @@ model Appointment {
   status        AppointmentStatus @default(PENDING)
   confirmToken  String            @unique @default(uuid())
   cancelToken   String            @unique @default(uuid())
+  emailVerifiedAt DateTime?
+  reminderSentAt  DateTime?
   source        AppointmentSource @default(WEB)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
