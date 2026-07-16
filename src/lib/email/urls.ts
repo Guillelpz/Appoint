@@ -1,5 +1,5 @@
 export function getAppBaseUrl(): string {
-  return process.env.APP_BASE_URL || 'http://localhost:3000';
+  return (process.env.APP_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
 }
 
 export function buildConfirmUrl(token: string): string {

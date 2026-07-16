@@ -31,4 +31,9 @@ describe('urls de email', () => {
     process.env.APP_BASE_URL = 'https://salonaura.example';
     expect(buildCancelUrl('abc123')).toBe('https://salonaura.example/cita/abc123');
   });
+
+  it('normaliza URLs con barra final para evitar doble barra', () => {
+    process.env.APP_BASE_URL = 'https://ejemplo.com/';
+    expect(buildConfirmUrl('abc')).toBe('https://ejemplo.com/confirmar/abc');
+  });
 });
