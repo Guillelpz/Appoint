@@ -36,6 +36,20 @@ export async function sendDueReminders(
 
   let sent = 0;
   for (const appointment of appointments) {
+    // Reclama la cita de forma atómica ANTES de enviar el email: si otra
+    // ejecución del cron se solapa (misma cita seleccionada por ambas antes
+    // de que ninguna la marque), este updateMany con reminderSentAt: null en
+    // el where hace que como mucho una de las dos consiga count === 1. La
+    // otra ve count === 0 y la salta, evitando el envío duplicado.
+    const claim = await prisma.appointment.updateMany({
+      where: { id: appointment.id, reminderSentAt: null },
+      data: { reminderSentAt: now },
+    });
+
+    if (claim.count === 0) {
+      continue;
+    }
+
     const result = await sendReminderEmail(emailSender, {
       appointment,
       service: appointment.service,
@@ -44,11 +58,24 @@ export async function sendDueReminders(
     });
 
     if (result.ok) {
-      await prisma.appointment.update({
-        where: { id: appointment.id },
-        data: { reminderSentAt: now },
-      });
       sent += 1;
+    } else {
+      // El envío falló: la cita no debe quedar marcada como recordada, así
+      // que revertimos la marca puesta al reclamarla. Best-effort: si este
+      // revert también fallara, la cita quedaría marcada sin haberse
+      // enviado el email realmente (caso extremo aceptado; se detectaría y
+      // reintentaría manualmente).
+      try {
+        await prisma.appointment.update({
+          where: { id: appointment.id },
+          data: { reminderSentAt: null },
+        });
+      } catch (error) {
+        console.error('[reminders] no se pudo revertir reminderSentAt tras un envío fallido', {
+          appointmentId: appointment.id,
+          error,
+        });
+      }
     }
   }
 

@@ -142,4 +142,103 @@ describe('sendDueReminders', () => {
       ['recordatorio-multi-a@example.com', 'recordatorio-multi-b@example.com'].sort()
     );
   });
+
+  it('no envía ni marca reminderSentAt si el envío de email falla', async () => {
+    const start = new Date(NOW.getTime() + 24.5 * 60 * 60 * 1000);
+    const { appointment } = await createConfirmedAppointment(start, 'recordatorio-fallo@example.com');
+    const failingSender = {
+      send: async () => {
+        throw new Error('fallo de red');
+      },
+    };
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender: failingSender });
+
+    expect(result.sent).toBe(0);
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.reminderSentAt).toBeNull();
+  });
+
+  it('incluye una cita cuyo inicio cae exactamente en now+24h (límite inferior de la ventana)', async () => {
+    const start = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
+    const { appointment } = await createConfirmedAppointment(start, 'recordatorio-limite-inferior@example.com');
+    const emailSender = new FakeEmailSender();
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender });
+
+    expect(result.sent).toBe(1);
+    expect(emailSender.sent).toHaveLength(1);
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.reminderSentAt).not.toBeNull();
+  });
+
+  it('excluye una cita cuyo inicio cae exactamente en now+25h (límite superior de la ventana, exclusivo)', async () => {
+    const start = new Date(NOW.getTime() + 25 * 60 * 60 * 1000);
+    const { appointment } = await createConfirmedAppointment(start, 'recordatorio-limite-superior@example.com');
+    const emailSender = new FakeEmailSender();
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender });
+
+    expect(result.sent).toBe(0);
+    expect(emailSender.sent).toHaveLength(0);
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.reminderSentAt).toBeNull();
+  });
+
+  it('excluye una cita cuyo inicio está claramente por debajo de la ventana (now+20h)', async () => {
+    // Inserción directa (sin pasar por createAppointment) para no depender del
+    // horario laboral del empleado: aquí solo se prueba el límite de la
+    // ventana de sendDueReminders, no las reglas de disponibilidad.
+    const seed = await seedDemoBusiness(prisma);
+    const start = new Date(NOW.getTime() + 20 * 60 * 60 * 1000);
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente muy pronto',
+        phone: '+34688000033',
+        email: 'recordatorio-muy-pronto@example.com',
+      },
+    });
+    await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        start,
+        end: new Date(start.getTime() + 30 * 60 * 1000),
+        status: 'CONFIRMED',
+      },
+    });
+    const emailSender = new FakeEmailSender();
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender });
+
+    expect(result.sent).toBe(0);
+    expect(emailSender.sent).toHaveLength(0);
+  });
+
+  it('dos ejecuciones concurrentes de sendDueReminders no duplican el envío de la misma cita', async () => {
+    const start = new Date(NOW.getTime() + 24.5 * 60 * 60 * 1000);
+    const { appointment } = await createConfirmedAppointment(start, 'recordatorio-concurrente@example.com');
+    const emailSender = new FakeEmailSender();
+
+    const [resultA, resultB] = await Promise.all([
+      sendDueReminders(prisma, { now: NOW, emailSender }),
+      sendDueReminders(prisma, { now: NOW, emailSender }),
+    ]);
+
+    expect(resultA.sent + resultB.sent).toBe(1);
+    expect(emailSender.sent).toHaveLength(1);
+    expect(emailSender.sent[0].to).toBe('recordatorio-concurrente@example.com');
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.reminderSentAt).not.toBeNull();
+  });
 });
