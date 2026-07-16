@@ -66,4 +66,20 @@ describe('cancelPublicAppointment', () => {
     expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
     expect(emailSender.sent).toHaveLength(0);
   });
+
+  it('con dos cancelaciones concurrentes del mismo token (doble click), los emails se envían una única vez', async () => {
+    const { appointment } = await createTestAppointment({ customerEmail: 'cancelacion-concurrente@example.com' });
+    const emailSender = new FakeEmailSender();
+
+    const [first, second] = await Promise.all([
+      cancelPublicAppointment(prisma, { token: appointment.cancelToken, emailSender }),
+      cancelPublicAppointment(prisma, { token: appointment.cancelToken, emailSender }),
+    ]);
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (first.ok) expect(first.appointment.status).toBe('CANCELLED');
+    if (second.ok) expect(second.appointment.status).toBe('CANCELLED');
+    expect(emailSender.sent).toHaveLength(2);
+  });
 });

@@ -13,22 +13,36 @@ export async function cancelPublicAppointment(
   prisma: PrismaClient,
   input: CancelPublicAppointmentInput
 ): Promise<CancelAppointmentResult> {
-  // Se comprueba el estado ANTES de cancelar para no reenviar emails si la
-  // cita ya estaba CANCELLED (cancelAppointment es idempotente y devuelve
-  // ok:true en ambos casos, sin distinguirlos).
-  const before = await prisma.appointment.findUnique({ where: { cancelToken: input.token } });
-  const wasAlreadyCancelled = before?.status === 'CANCELLED';
+  // Claim atómica: un único UPDATE condicionado por status decide, a nivel
+  // de base de datos, qué invocación es la que realmente cancela la cita.
+  // Esto es necesario porque un "leer estado, luego decidir si envío
+  // email" no es seguro ante dos peticiones concurrentes sobre el mismo
+  // token (doble click, doble pestaña): ambas leerían "todavía no
+  // cancelada" antes de que la otra escriba, y las dos enviarían los
+  // emails (duplicados). Con updateMany + where en status, solo una de las
+  // dos consigue count === 1; la otra ve count === 0 y no envía nada.
+  //
+  // El where replica exactamente las transiciones que canTransition()
+  // permite hacia CANCELLED (ver src/lib/booking/state.ts): PENDING y
+  // CONFIRMED. El token sigue siendo el único selector (multi-tenant safe,
+  // igual que antes).
+  const claim = await prisma.appointment.updateMany({
+    where: { cancelToken: input.token, status: { in: ['PENDING', 'CONFIRMED'] } },
+    data: { status: 'CANCELLED' },
+  });
 
-  const result = await cancelAppointment(prisma, input.token);
-
-  if (result.ok && !wasAlreadyCancelled) {
-    const emailSender = input.emailSender ?? getEmailSender();
+  if (claim.count === 1) {
+    // Esta invocación es la única responsable de la cancelación: solo ella
+    // envía los dos emails.
     const withRelations = await prisma.appointment.findUnique({
-      where: { id: result.appointment.id },
+      where: { cancelToken: input.token },
       include: { service: true, employee: true, business: true },
     });
 
+    // No debería poder ser null (acabamos de actualizarla en esta misma
+    // función), pero se comprueba de forma defensiva sin lanzar.
     if (withRelations) {
+      const emailSender = input.emailSender ?? getEmailSender();
       const ctx = {
         appointment: withRelations,
         service: withRelations.service,
@@ -37,8 +51,16 @@ export async function cancelPublicAppointment(
       };
       await sendCancellationConfirmationEmail(emailSender, ctx);
       await sendCancellationNoticeToBusinessEmail(emailSender, ctx);
+      return { ok: true, appointment: withRelations };
     }
   }
 
-  return result;
+  // claim.count === 0: esta invocación no ha cancelado nada. Puede deberse a
+  // que el token no existe, a que la cita ya estaba CANCELLED (reintento /
+  // doble click perdedor) o a que está en un estado no cancelable
+  // (COMPLETED, NO_SHOW). Se delega en cancelAppointment (motor) solo para
+  // clasificar el resultado exactamente igual que antes — no volverá a
+  // escribir nada porque ninguna de esas transiciones es válida ni cambia
+  // el estado, así que tampoco reenvía emails.
+  return cancelAppointment(prisma, input.token);
 }
