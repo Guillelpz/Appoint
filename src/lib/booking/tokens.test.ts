@@ -2,13 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
 import { createAppointment } from './create-appointment';
-import { confirmAppointment, cancelAppointment } from './tokens';
+import { confirmAppointment, cancelAppointment, isPendingAppointmentExpired } from './tokens';
 
 const NOW = new Date('2026-07-13T08:00:00.000Z');
 const VALID_START = new Date('2026-07-14T08:00:00.000Z');
 
-async function createPendingAppointment(overrides: { createdAt?: Date } = {}) {
+async function createPendingAppointment(overrides: { createdAt?: Date; manualApproval?: boolean } = {}) {
   const seed = await seedDemoBusiness(prisma);
+  if (overrides.manualApproval) {
+    await prisma.business.update({ where: { id: seed.business.id }, data: { manualApproval: true } });
+  }
+
   const result = await createAppointment(prisma, {
     businessId: seed.business.id,
     serviceId: seed.services.corteHombre.id,
@@ -36,8 +40,28 @@ async function createPendingAppointment(overrides: { createdAt?: Date } = {}) {
   return result.appointment;
 }
 
+describe('isPendingAppointmentExpired', () => {
+  it('es false justo antes de los 30 minutos', () => {
+    const createdAt = new Date('2026-07-14T10:00:00.000Z');
+    const now = new Date(createdAt.getTime() + 29 * 60 * 1000);
+    expect(isPendingAppointmentExpired({ createdAt }, now)).toBe(false);
+  });
+
+  it('es true en el instante exacto de los 30 minutos (frontera de caducidad)', () => {
+    const createdAt = new Date('2026-07-14T10:00:00.000Z');
+    const now = new Date(createdAt.getTime() + 30 * 60 * 1000);
+    expect(isPendingAppointmentExpired({ createdAt }, now)).toBe(true);
+  });
+
+  it('es true bastante después de los 30 minutos', () => {
+    const createdAt = new Date('2026-07-14T10:00:00.000Z');
+    const now = new Date(createdAt.getTime() + 60 * 60 * 1000);
+    expect(isPendingAppointmentExpired({ createdAt }, now)).toBe(true);
+  });
+});
+
 describe('confirmAppointment', () => {
-  it('confirma una cita PENDING dentro de los 30 minutos', async () => {
+  it('sin manualApproval: confirma una cita PENDING dentro de los 30 minutos y la deja CONFIRMED', async () => {
     const appointment = await createPendingAppointment({ createdAt: NOW });
     const confirmAt = new Date(NOW.getTime() + 10 * 60 * 1000); // 10 min después
 
@@ -46,10 +70,56 @@ describe('confirmAppointment', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.appointment.status).toBe('CONFIRMED');
+      expect(result.appointment.emailVerifiedAt).not.toBeNull();
+      expect(result.pendingApproval).toBe(false);
     }
   });
 
-  it('devuelve EXPIRED si han pasado más de 30 minutos desde la creación', async () => {
+  it('con manualApproval: confirmar fija emailVerifiedAt pero la cita SIGUE PENDING (pendiente de aprobación del negocio)', async () => {
+    const appointment = await createPendingAppointment({ createdAt: NOW, manualApproval: true });
+    const confirmAt = new Date(NOW.getTime() + 10 * 60 * 1000);
+
+    const result = await confirmAppointment(prisma, appointment.confirmToken, confirmAt);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.appointment.status).toBe('PENDING');
+      expect(result.appointment.emailVerifiedAt).not.toBeNull();
+      expect(result.pendingApproval).toBe(true);
+    }
+  });
+
+  it('con manualApproval: reconfirmar 40 minutos después (ya habría caducado) sigue siendo ok (idempotente, no reevalúa la caducidad)', async () => {
+    const appointment = await createPendingAppointment({ createdAt: NOW, manualApproval: true });
+
+    const first = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 10 * 60 * 1000));
+    expect(first.ok).toBe(true);
+
+    const second = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 40 * 60 * 1000));
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.appointment.status).toBe('PENDING');
+      expect(second.pendingApproval).toBe(true);
+    }
+  });
+
+  it('sin manualApproval: reconfirmar tras ya CONFIRMED (segundo click, aunque hayan pasado más de 30 min) sigue siendo ok (idempotente)', async () => {
+    const appointment = await createPendingAppointment({ createdAt: NOW });
+
+    const first = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 5 * 60 * 1000));
+    expect(first.ok).toBe(true);
+
+    const second = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 40 * 60 * 1000));
+
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.appointment.status).toBe('CONFIRMED');
+      expect(second.pendingApproval).toBe(false);
+    }
+  });
+
+  it('devuelve EXPIRED si han pasado más de 30 minutos desde la creación y nunca se verificó el email', async () => {
     const appointment = await createPendingAppointment({ createdAt: NOW });
     const confirmAt = new Date(NOW.getTime() + 31 * 60 * 1000); // 31 min después
 
@@ -59,8 +129,6 @@ describe('confirmAppointment', () => {
   });
 
   it('devuelve EXPIRED en el instante exacto de los 30 minutos (frontera de caducidad)', async () => {
-    // Convención canónica: la de activeAppointmentWhere (createdAt > now-30min
-    // ⇒ activa). En el instante exacto, la PENDING ya está caducada.
     const appointment = await createPendingAppointment({ createdAt: NOW });
     const confirmAt = new Date(NOW.getTime() + 30 * 60 * 1000); // exactamente 30 min después
 
@@ -75,14 +143,13 @@ describe('confirmAppointment', () => {
     expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
   });
 
-  it('devuelve INVALID_STATE si la cita ya no está PENDING', async () => {
+  it('devuelve INVALID_STATE si la cita ya está en un estado terminal (nunca se llegó a verificar el email)', async () => {
     const appointment = await createPendingAppointment({ createdAt: NOW });
-    const confirmAt = new Date(NOW.getTime() + 5 * 60 * 1000);
+    await prisma.appointment.update({ where: { id: appointment.id }, data: { status: 'CANCELLED' } });
 
-    await confirmAppointment(prisma, appointment.confirmToken, confirmAt);
-    const secondAttempt = await confirmAppointment(prisma, appointment.confirmToken, confirmAt);
+    const result = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 5 * 60 * 1000));
 
-    expect(secondAttempt).toEqual({ ok: false, reason: 'INVALID_STATE' });
+    expect(result).toEqual({ ok: false, reason: 'INVALID_STATE' });
   });
 });
 
