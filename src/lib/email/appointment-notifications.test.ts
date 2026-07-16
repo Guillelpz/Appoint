@@ -4,6 +4,7 @@ import { FakeEmailSender } from '../../test/fake-email-sender';
 import {
   sendBookingConfirmationEmail,
   sendBookingPendingApprovalEmail,
+  sendNewPendingRequestEmail,
   type AppointmentEmailContext,
 } from './appointment-notifications';
 
@@ -62,5 +63,36 @@ describe('sendBookingPendingApprovalEmail', () => {
     const text = await render(sender.sent[0].react, { plainText: true });
     expect(text).toContain('http://localhost:3000/confirmar/confirm-token-123');
     expect(text.toLowerCase()).toContain('aprob');
+  });
+});
+
+describe('sendNewPendingRequestEmail', () => {
+  it('envía al email del negocio con los datos del cliente y de la cita', async () => {
+    const sender = new FakeEmailSender();
+
+    const result = await sendNewPendingRequestEmail(sender, BASE_CTX);
+
+    expect(result.ok).toBe(true);
+    expect(sender.sent).toHaveLength(1);
+    expect(sender.sent[0].to).toBe('hola@salonaura.example');
+
+    const text = await render(sender.sent[0].react, { plainText: true });
+    expect(text).toContain('Ana López');
+    expect(text).toContain('+34600111222');
+    expect(text).toContain('ana@example.com');
+    expect(text).toContain('Corte de mujer');
+  });
+
+  it('devuelve ok:false sin lanzar si el negocio no tiene email configurado', async () => {
+    const sender = new FakeEmailSender();
+    const ctxSinEmail: AppointmentEmailContext = {
+      ...BASE_CTX,
+      business: { ...BASE_CTX.business, email: null },
+    };
+
+    const result = await sendNewPendingRequestEmail(sender, ctxSinEmail);
+
+    expect(result.ok).toBe(false);
+    expect(sender.sent).toHaveLength(0);
   });
 });

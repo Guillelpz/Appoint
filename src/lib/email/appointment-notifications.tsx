@@ -3,6 +3,7 @@ import type { EmailMessage, EmailSender } from './types';
 import { buildConfirmUrl } from './urls';
 import { BookingConfirmationEmail } from './templates/BookingConfirmationEmail';
 import { BookingPendingApprovalEmail } from './templates/BookingPendingApprovalEmail';
+import { NewPendingRequestEmail } from './templates/NewPendingRequestEmail';
 
 export interface AppointmentEmailAppointment {
   id: string;
@@ -91,6 +92,38 @@ export async function sendBookingPendingApprovalEmail(
         employeeName={ctx.employee.name}
         startLabel={formatAppointmentDateTime(ctx.appointment.start)}
         confirmUrl={buildConfirmUrl(ctx.appointment.confirmToken)}
+      />
+    ),
+  };
+
+  return trySend(emailSender, message);
+}
+
+export async function sendNewPendingRequestEmail(
+  emailSender: EmailSender,
+  ctx: AppointmentEmailContext
+): Promise<{ ok: boolean }> {
+  if (!ctx.business.email) {
+    console.warn('[email] el negocio no tiene email configurado, no se envía aviso de nueva solicitud', {
+      businessName: ctx.business.name,
+    });
+    return { ok: false };
+  }
+
+  const message: EmailMessage = {
+    to: ctx.business.email,
+    subject: 'Nueva solicitud de cita pendiente de aprobación',
+    react: (
+      <NewPendingRequestEmail
+        businessName={ctx.business.name}
+        accentColor={ctx.business.accentColor}
+        logoUrl={ctx.business.logoUrl}
+        customerName={ctx.appointment.customerName}
+        customerPhone={ctx.appointment.customerPhone}
+        customerEmail={ctx.appointment.customerEmail}
+        serviceName={ctx.service.name}
+        employeeName={ctx.employee.name}
+        startLabel={formatAppointmentDateTime(ctx.appointment.start)}
       />
     ),
   };
