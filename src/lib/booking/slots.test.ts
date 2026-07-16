@@ -320,4 +320,46 @@ describe('getAvailableSlots — huecos base', () => {
 
     expect(slots.some((s) => s.start.toISOString() === '2026-07-14T16:00:00.000Z')).toBe(true);
   });
+
+  it('una PENDING con emailVerifiedAt fijado sigue bloqueando el hueco aunque hayan pasado más de 30 minutos (manualApproval, esperando aprobación del negocio)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-14T13:00:00.000Z'); // 15:00 local
+
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente verificado',
+        phone: '+34611000202',
+        email: 'verificado-slots@example.com',
+      },
+    });
+
+    await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        start: new Date('2026-07-14T16:00:00.000Z'),
+        end: new Date('2026-07-14T16:35:00.000Z'),
+        status: 'PENDING',
+        createdAt: new Date(now.getTime() - 40 * 60 * 1000), // caducada por tiempo
+        emailVerifiedAt: new Date(now.getTime() - 35 * 60 * 1000), // pero ya verificada
+      },
+    });
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    expect(slots.some((s) => s.start.toISOString() === '2026-07-14T16:00:00.000Z')).toBe(false);
+  });
 });

@@ -382,6 +382,54 @@ describe('createAppointment', () => {
     expect(refreshedStale.status).toBe('CANCELLED');
   });
 
+  it('no permite reservar el mismo hueco de una PENDING con emailVerifiedAt fijado, y no la cancela aunque esté caducada por tiempo (bloqueo indefinido a la espera de aprobación del negocio)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const staleCustomer = await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente verificado',
+        phone: '+34666000014',
+        email: 'verificado-create@example.com',
+      },
+    });
+
+    const staleAppointment = await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: staleCustomer.id,
+        customerName: staleCustomer.name,
+        customerPhone: staleCustomer.phone,
+        customerEmail: staleCustomer.email,
+        start: VALID_START,
+        end: new Date(VALID_START.getTime() + 35 * 60 * 1000),
+        status: 'PENDING',
+        createdAt: new Date(NOW.getTime() - 40 * 60 * 1000), // caducada por tiempo
+        emailVerifiedAt: new Date(NOW.getTime() - 35 * 60 * 1000), // pero ya verificada
+      },
+    });
+
+    const result = await createAppointment(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Otro cliente',
+      customerPhone: '+34666000015',
+      customerEmail: 'otro-verificado@example.com',
+      source: 'WEB',
+      ipAddress: '198.51.100.12',
+      now: NOW,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
+
+    const refreshedStale = await prisma.appointment.findUniqueOrThrow({ where: { id: staleAppointment.id } });
+    expect(refreshedStale.status).toBe('PENDING');
+  });
+
   it('rechaza con BUSINESS_NOT_FOUND si el negocio no existe', async () => {
     const seed = await seedDemoBusiness(prisma);
 

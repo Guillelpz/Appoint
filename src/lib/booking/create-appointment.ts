@@ -9,7 +9,7 @@ import {
   checkNoOverlapForCustomer,
 } from './anti-fraud';
 import { getLocalDateString } from './timezone';
-import { PENDING_EXPIRY_MINUTES } from './active-appointments';
+import { releaseExpiredPendingSlot } from './active-appointments';
 
 export interface CreateAppointmentInput {
   businessId: string;
@@ -158,21 +158,13 @@ export async function createAppointment(
 
   try {
     const appointment = await prisma.$transaction(async (tx) => {
-      // Libera las PENDING caducadas que ocupan este mismo (employeeId, start):
-      // getAvailableSlots ya las ignora (expiración perezosa), pero siguen
-      // cumpliendo el predicado del índice único parcial
-      // WHERE status IN ('PENDING','CONFIRMED'), y sin este paso el INSERT
-      // chocaría con el índice y devolvería un SLOT_TAKEN falso.
-      const pendingCutoff = new Date(now.getTime() - PENDING_EXPIRY_MINUTES * 60 * 1000);
-      await tx.appointment.updateMany({
-        where: {
-          employeeId,
-          start: input.start,
-          status: 'PENDING',
-          createdAt: { lte: pendingCutoff },
-        },
-        data: { status: 'CANCELLED' },
-      });
+      // Libera las PENDING caducadas (por tiempo, no verificadas) que ocupan
+      // este mismo (employeeId, start): getAvailableSlots ya las ignora
+      // (expiración perezosa), pero siguen cumpliendo el predicado del
+      // índice único parcial WHERE status IN ('PENDING','CONFIRMED'), y sin
+      // este paso el INSERT chocaría con el índice y devolvería un
+      // SLOT_TAKEN falso.
+      await releaseExpiredPendingSlot(tx, { employeeId, start: input.start, now });
 
       const customer = await tx.customer.upsert({
         where: {

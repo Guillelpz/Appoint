@@ -100,6 +100,60 @@ describe('checkActiveAppointmentLimit', () => {
 
     expect(allowed).toBe(false);
   });
+
+  it('cuenta como activa una PENDING con emailVerifiedAt fijado aunque esté caducada por tiempo', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    const customer = await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente límite verificado',
+        phone: '+34633000010',
+        email: 'limite-verificado@example.com',
+      },
+    });
+
+    await prisma.appointment.createMany({
+      data: [
+        {
+          businessId: seed.business.id,
+          serviceId: seed.services.corteHombre.id,
+          employeeId: seed.employees.marta.id,
+          customerId: customer.id,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          customerEmail: customer.email,
+          start: new Date('2026-07-14T08:00:00.000Z'),
+          end: new Date('2026-07-14T08:35:00.000Z'),
+          status: 'CONFIRMED',
+        },
+        {
+          businessId: seed.business.id,
+          serviceId: seed.services.corteHombre.id,
+          employeeId: seed.employees.carlos.id,
+          customerId: customer.id,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          customerEmail: customer.email,
+          start: new Date('2026-07-14T14:00:00.000Z'),
+          end: new Date('2026-07-14T14:35:00.000Z'),
+          status: 'PENDING',
+          createdAt: new Date(now.getTime() - 40 * 60 * 1000), // caducada por tiempo
+          emailVerifiedAt: new Date(now.getTime() - 35 * 60 * 1000), // pero ya verificada: sigue activa
+        },
+      ],
+    });
+
+    const allowed = await checkActiveAppointmentLimit(prisma, {
+      businessId: seed.business.id,
+      phone: customer.phone,
+      email: customer.email,
+      now,
+    });
+
+    expect(allowed).toBe(false);
+  });
 });
 
 describe('checkNoOverlapForCustomer', () => {
