@@ -11,6 +11,7 @@ const VALID_START = new Date('2026-07-14T08:00:00.000Z');
 describe('bookAppointmentBySlug', () => {
   it('crea la cita y devuelve los tokens cuando todo es correcto', async () => {
     const seed = await seedDemoBusiness(prisma);
+    const emailSender = new FakeEmailSender();
 
     const result = await bookAppointmentBySlug(prisma, {
       slug: 'salon-aura',
@@ -22,6 +23,7 @@ describe('bookAppointmentBySlug', () => {
       customerEmail: 'servicio@example.com',
       ipAddress: '198.51.100.60',
       now: NOW,
+      emailSender,
     });
 
     expect(result.ok).toBe(true);
@@ -35,6 +37,7 @@ describe('bookAppointmentBySlug', () => {
   it('marca pendingApproval en true si el negocio tiene manualApproval activado', async () => {
     const seed = await seedDemoBusiness(prisma);
     await prisma.business.update({ where: { id: seed.business.id }, data: { manualApproval: true } });
+    const emailSender = new FakeEmailSender();
 
     const result = await bookAppointmentBySlug(prisma, {
       slug: 'salon-aura',
@@ -46,6 +49,7 @@ describe('bookAppointmentBySlug', () => {
       customerEmail: 'aprobacion@example.com',
       ipAddress: '198.51.100.61',
       now: NOW,
+      emailSender,
     });
 
     expect(result.ok).toBe(true);
@@ -150,6 +154,7 @@ describe('bookAppointmentBySlug', () => {
     await prisma.blacklistEntry.create({
       data: { businessId: seed.business.id, email: 'vetado-servicio@example.com', reason: 'No presentado' },
     });
+    const emailSender = new FakeEmailSender();
 
     const result = await bookAppointmentBySlug(prisma, {
       slug: 'salon-aura',
@@ -161,6 +166,7 @@ describe('bookAppointmentBySlug', () => {
       customerEmail: 'vetado-servicio@example.com',
       ipAddress: '198.51.100.62',
       now: NOW,
+      emailSender,
     });
 
     expect(result).toEqual({
@@ -185,6 +191,7 @@ describe('bookAppointmentBySlug', () => {
         customerEmail: email,
         ipAddress: '198.51.100.63',
         now: NOW,
+        emailSender: new FakeEmailSender(),
       });
 
     const [resultA, resultB] = await Promise.all([
@@ -230,6 +237,7 @@ describe('bookAppointmentBySlug', () => {
 
   it('devuelve el mensaje de BUSINESS_NOT_FOUND si el slug no existe', async () => {
     const seed = await seedDemoBusiness(prisma);
+    const emailSender = new FakeEmailSender();
 
     const result = await bookAppointmentBySlug(prisma, {
       slug: 'no-existe',
@@ -241,6 +249,7 @@ describe('bookAppointmentBySlug', () => {
       customerEmail: 'sinnegocio-servicio@example.com',
       ipAddress: '198.51.100.64',
       now: NOW,
+      emailSender,
     });
 
     expect(result).toEqual({
@@ -253,6 +262,7 @@ describe('bookAppointmentBySlug', () => {
   it('rechaza un email malformado sin crear ningún cliente nuevo', async () => {
     const seed = await seedDemoBusiness(prisma);
     const customersBefore = await prisma.customer.count({ where: { businessId: seed.business.id } });
+    const emailSender = new FakeEmailSender();
 
     const result = await bookAppointmentBySlug(prisma, {
       slug: 'salon-aura',
@@ -264,6 +274,7 @@ describe('bookAppointmentBySlug', () => {
       customerEmail: 'no-es-un-email',
       ipAddress: '198.51.100.65',
       now: NOW,
+      emailSender,
     });
 
     expect(result).toEqual({
@@ -278,6 +289,7 @@ describe('bookAppointmentBySlug', () => {
 
   it('normaliza espacios y mayúsculas en los datos del cliente antes de persistir', async () => {
     const seed = await seedDemoBusiness(prisma);
+    const emailSender = new FakeEmailSender();
 
     const result = await bookAppointmentBySlug(prisma, {
       slug: 'salon-aura',
@@ -289,6 +301,7 @@ describe('bookAppointmentBySlug', () => {
       customerEmail: 'Normalizado@Example.com',
       ipAddress: '198.51.100.66',
       now: NOW,
+      emailSender,
     });
 
     expect(result.ok).toBe(true);
