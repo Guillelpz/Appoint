@@ -4,6 +4,8 @@ import { buildConfirmUrl } from './urls';
 import { BookingConfirmationEmail } from './templates/BookingConfirmationEmail';
 import { BookingPendingApprovalEmail } from './templates/BookingPendingApprovalEmail';
 import { NewPendingRequestEmail } from './templates/NewPendingRequestEmail';
+import { CancellationConfirmationEmail } from './templates/CancellationConfirmationEmail';
+import { CancellationNoticeToBusinessEmail } from './templates/CancellationNoticeToBusinessEmail';
 
 export interface AppointmentEmailAppointment {
   id: string;
@@ -92,6 +94,61 @@ export async function sendBookingPendingApprovalEmail(
         employeeName={ctx.employee.name}
         startLabel={formatAppointmentDateTime(ctx.appointment.start)}
         confirmUrl={buildConfirmUrl(ctx.appointment.confirmToken)}
+      />
+    ),
+  };
+
+  return trySend(emailSender, message);
+}
+
+export async function sendCancellationConfirmationEmail(
+  emailSender: EmailSender,
+  ctx: AppointmentEmailContext
+): Promise<{ ok: boolean }> {
+  const message: EmailMessage = {
+    to: ctx.appointment.customerEmail,
+    subject: `Tu cita en ${ctx.business.name} ha sido cancelada`,
+    react: (
+      <CancellationConfirmationEmail
+        businessName={ctx.business.name}
+        accentColor={ctx.business.accentColor}
+        logoUrl={ctx.business.logoUrl}
+        customerName={ctx.appointment.customerName}
+        serviceName={ctx.service.name}
+        employeeName={ctx.employee.name}
+        startLabel={formatAppointmentDateTime(ctx.appointment.start)}
+      />
+    ),
+  };
+
+  return trySend(emailSender, message);
+}
+
+export async function sendCancellationNoticeToBusinessEmail(
+  emailSender: EmailSender,
+  ctx: AppointmentEmailContext
+): Promise<{ ok: boolean }> {
+  if (!ctx.business.email) {
+    console.warn('[email] el negocio no tiene email configurado, no se envía aviso de cancelación', {
+      businessName: ctx.business.name,
+    });
+    return { ok: false };
+  }
+
+  const message: EmailMessage = {
+    to: ctx.business.email,
+    subject: 'Un cliente ha cancelado su cita',
+    react: (
+      <CancellationNoticeToBusinessEmail
+        businessName={ctx.business.name}
+        accentColor={ctx.business.accentColor}
+        logoUrl={ctx.business.logoUrl}
+        customerName={ctx.appointment.customerName}
+        customerPhone={ctx.appointment.customerPhone}
+        customerEmail={ctx.appointment.customerEmail}
+        serviceName={ctx.service.name}
+        employeeName={ctx.employee.name}
+        startLabel={formatAppointmentDateTime(ctx.appointment.start)}
       />
     ),
   };

@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
-import { cancelAppointment } from '@/lib/booking/tokens';
+import { cancelPublicAppointment } from '@/lib/public/cancellation-service';
 
 export async function cancelAppointmentAction(token: string): Promise<void> {
-  await cancelAppointment(prisma, token);
+  await cancelPublicAppointment(prisma, { token });
   revalidatePath(`/cita/${token}`);
 }

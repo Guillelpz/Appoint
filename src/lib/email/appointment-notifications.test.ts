@@ -5,6 +5,8 @@ import {
   sendBookingConfirmationEmail,
   sendBookingPendingApprovalEmail,
   sendNewPendingRequestEmail,
+  sendCancellationConfirmationEmail,
+  sendCancellationNoticeToBusinessEmail,
   type AppointmentEmailContext,
 } from './appointment-notifications';
 
@@ -91,6 +93,50 @@ describe('sendNewPendingRequestEmail', () => {
     };
 
     const result = await sendNewPendingRequestEmail(sender, ctxSinEmail);
+
+    expect(result.ok).toBe(false);
+    expect(sender.sent).toHaveLength(0);
+  });
+});
+
+describe('sendCancellationConfirmationEmail', () => {
+  it('envía al cliente confirmando la cancelación', async () => {
+    const sender = new FakeEmailSender();
+
+    const result = await sendCancellationConfirmationEmail(sender, BASE_CTX);
+
+    expect(result.ok).toBe(true);
+    expect(sender.sent).toHaveLength(1);
+    expect(sender.sent[0].to).toBe('ana@example.com');
+
+    const text = await render(sender.sent[0].react, { plainText: true });
+    expect(text).toContain('Corte de mujer');
+    expect(text.toLowerCase()).toContain('cancelad');
+  });
+});
+
+describe('sendCancellationNoticeToBusinessEmail', () => {
+  it('envía al negocio avisando de la cancelación del cliente', async () => {
+    const sender = new FakeEmailSender();
+
+    const result = await sendCancellationNoticeToBusinessEmail(sender, BASE_CTX);
+
+    expect(result.ok).toBe(true);
+    expect(sender.sent).toHaveLength(1);
+    expect(sender.sent[0].to).toBe('hola@salonaura.example');
+
+    const text = await render(sender.sent[0].react, { plainText: true });
+    expect(text).toContain('Ana López');
+  });
+
+  it('devuelve ok:false sin lanzar si el negocio no tiene email configurado', async () => {
+    const sender = new FakeEmailSender();
+    const ctxSinEmail: AppointmentEmailContext = {
+      ...BASE_CTX,
+      business: { ...BASE_CTX.business, email: null },
+    };
+
+    const result = await sendCancellationNoticeToBusinessEmail(sender, ctxSinEmail);
 
     expect(result.ok).toBe(false);
     expect(sender.sent).toHaveLength(0);
