@@ -13,7 +13,7 @@ export function StepSuccess({ pendingApproval, onClose }: StepSuccessProps) {
       </p>
       <p className="mb-6 text-sm text-[var(--color-text-muted)]">
         {pendingApproval
-          ? 'Tu cita está pendiente de aprobación por parte del negocio. Te avisaremos por email en cuanto la confirmen.'
+          ? 'Te hemos enviado un email para confirmar tu dirección. Una vez la confirmes, el negocio revisará tu solicitud y te avisaremos por email en cuanto la apruebe.'
           : 'Te hemos enviado un email para confirmar tu cita. Tienes 30 minutos para confirmarla o el hueco se liberará.'}
       </p>
       <button

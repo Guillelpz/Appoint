@@ -3,6 +3,7 @@ import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
 import { bookAppointmentBySlug } from './booking-service';
 import { INVALID_INPUT_MESSAGE } from './error-messages';
+import { FakeEmailSender } from '../../test/fake-email-sender';
 
 const NOW = new Date('2026-07-13T08:00:00.000Z');
 const VALID_START = new Date('2026-07-14T08:00:00.000Z');
@@ -51,6 +52,97 @@ describe('bookAppointmentBySlug', () => {
     if (result.ok) {
       expect(result.pendingApproval).toBe(true);
     }
+  });
+
+  it('envía el email de confirmación al cliente cuando la reserva no requiere aprobación manual', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const emailSender = new FakeEmailSender();
+
+    const result = await bookAppointmentBySlug(prisma, {
+      slug: 'salon-aura',
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente email',
+      customerPhone: '+34699000020',
+      customerEmail: 'email-confirmacion@example.com',
+      ipAddress: '198.51.100.70',
+      now: NOW,
+      emailSender,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(emailSender.sent).toHaveLength(1);
+    expect(emailSender.sent[0].to).toBe('email-confirmacion@example.com');
+    expect(emailSender.sent[0].subject).toContain('Salón Aura');
+  });
+
+  it('envía la solicitud pendiente al cliente y el aviso al negocio cuando manualApproval está activo', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.business.update({ where: { id: seed.business.id }, data: { manualApproval: true } });
+    const emailSender = new FakeEmailSender();
+
+    const result = await bookAppointmentBySlug(prisma, {
+      slug: 'salon-aura',
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente aprobación email',
+      customerPhone: '+34699000021',
+      customerEmail: 'email-aprobacion@example.com',
+      ipAddress: '198.51.100.71',
+      now: NOW,
+      emailSender,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(emailSender.sent).toHaveLength(2);
+    expect(emailSender.sent.map((m) => m.to).sort()).toEqual(
+      ['email-aprobacion@example.com', 'hola@salonaura.example'].sort()
+    );
+  });
+
+  it('no envía ningún email si la reserva falla', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.blacklistEntry.create({
+      data: { businessId: seed.business.id, email: 'vetado-email@example.com', reason: 'No presentado' },
+    });
+    const emailSender = new FakeEmailSender();
+
+    await bookAppointmentBySlug(prisma, {
+      slug: 'salon-aura',
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Vetado email',
+      customerPhone: '+34699000022',
+      customerEmail: 'vetado-email@example.com',
+      ipAddress: '198.51.100.72',
+      now: NOW,
+      emailSender,
+    });
+
+    expect(emailSender.sent).toHaveLength(0);
+  });
+
+  it('la reserva sigue teniendo éxito aunque el envío de email falle', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const failingSender = { send: async () => { throw new Error('fallo de red simulado'); } };
+
+    const result = await bookAppointmentBySlug(prisma, {
+      slug: 'salon-aura',
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente resiliente',
+      customerPhone: '+34699000023',
+      customerEmail: 'resiliente@example.com',
+      ipAddress: '198.51.100.73',
+      now: NOW,
+      emailSender: failingSender,
+    });
+
+    expect(result.ok).toBe(true);
   });
 
   it('devuelve mensaje amable y sin alternativas para BLACKLISTED', async () => {

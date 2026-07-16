@@ -4,6 +4,13 @@ import { getLocalDateString } from '@/lib/booking/timezone';
 import { getBookingErrorMessage, INVALID_INPUT_MESSAGE } from './error-messages';
 import { getAvailableSlotsForBusiness } from './slots-service';
 import { validateBookingInput } from './validate-booking-input';
+import { getEmailSender } from '@/lib/email/get-email-sender';
+import type { EmailSender } from '@/lib/email/types';
+import {
+  sendBookingConfirmationEmail,
+  sendBookingPendingApprovalEmail,
+  sendNewPendingRequestEmail,
+} from '@/lib/email/appointment-notifications';
 
 export interface BookAppointmentBySlugInput {
   slug: string;
@@ -15,6 +22,7 @@ export interface BookAppointmentBySlugInput {
   customerEmail: string;
   ipAddress: string;
   now?: Date;
+  emailSender?: EmailSender;
 }
 
 export type BookAppointmentBySlugResult =
@@ -26,6 +34,7 @@ export async function bookAppointmentBySlug(
   input: BookAppointmentBySlugInput
 ): Promise<BookAppointmentBySlugResult> {
   const now = input.now ?? new Date();
+  const emailSender = input.emailSender ?? getEmailSender();
 
   const validation = validateBookingInput({
     customerName: input.customerName,
@@ -57,6 +66,30 @@ export async function bookAppointmentBySlug(
   });
 
   if (result.ok) {
+    // Los envíos ocurren después de que la reserva ya ha tenido éxito: un
+    // fallo de envío (capturado dentro de cada sendXEmail) nunca hace
+    // fallar la reserva.
+    const withRelations = await prisma.appointment.findUnique({
+      where: { id: result.appointment.id },
+      include: { service: true, employee: true },
+    });
+
+    if (withRelations) {
+      const ctx = {
+        appointment: withRelations,
+        service: withRelations.service,
+        employee: withRelations.employee,
+        business,
+      };
+
+      if (business.manualApproval) {
+        await sendBookingPendingApprovalEmail(emailSender, ctx);
+        await sendNewPendingRequestEmail(emailSender, ctx);
+      } else {
+        await sendBookingConfirmationEmail(emailSender, ctx);
+      }
+    }
+
     return {
       ok: true,
       confirmToken: result.appointment.confirmToken,
