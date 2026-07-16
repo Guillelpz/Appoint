@@ -151,6 +151,41 @@ describe('confirmAppointment', () => {
 
     expect(result).toEqual({ ok: false, reason: 'INVALID_STATE' });
   });
+
+  it('devuelve INVALID_STATE si una cita ya confirmada (emailVerifiedAt fijado) fue cancelada después y se revisita el enlace', async () => {
+    const appointment = await createPendingAppointment({ createdAt: NOW });
+
+    const first = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 5 * 60 * 1000));
+    expect(first.ok).toBe(true);
+
+    await prisma.appointment.update({ where: { id: appointment.id }, data: { status: 'CANCELLED' } });
+
+    const result = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 15 * 60 * 1000));
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_STATE' });
+  });
+
+  it('devuelve INVALID_STATE si una cita ya confirmada (emailVerifiedAt fijado) pasó a COMPLETED y se revisita el enlace', async () => {
+    const appointment = await createPendingAppointment({ createdAt: NOW });
+
+    const first = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 5 * 60 * 1000));
+    expect(first.ok).toBe(true);
+
+    await prisma.appointment.update({ where: { id: appointment.id }, data: { status: 'COMPLETED' } });
+
+    const result = await confirmAppointment(prisma, appointment.confirmToken, new Date(NOW.getTime() + 15 * 60 * 1000));
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_STATE' });
+  });
+
+  it('con manualApproval: devuelve EXPIRED en el primer intento si la PENDING ya caducó (nunca se verificó el email)', async () => {
+    const appointment = await createPendingAppointment({ createdAt: NOW, manualApproval: true });
+    const confirmAt = new Date(NOW.getTime() + 31 * 60 * 1000); // 31 min después
+
+    const result = await confirmAppointment(prisma, appointment.confirmToken, confirmAt);
+
+    expect(result).toEqual({ ok: false, reason: 'EXPIRED' });
+  });
 });
 
 describe('cancelAppointment', () => {

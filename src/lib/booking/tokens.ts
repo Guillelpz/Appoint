@@ -39,7 +39,14 @@ export async function confirmAppointment(
   // /confirmar/{token} (comparar status === 'CONFIRMED' tras un
   // INVALID_STATE): con manualApproval el status nunca cambia a CONFIRMED
   // en este paso, así que ese caso especial ya no serviría.
-  if (appointment.emailVerifiedAt) {
+  //
+  // Importante: este atajo solo es válido mientras la cita sigue activa
+  // (PENDING o CONFIRMED). Si tras verificar el email la cita pasó a un
+  // estado terminal (CANCELLED/COMPLETED/NO_SHOW) — p.ej. el negocio la
+  // canceló o el cliente no se presentó — revisitar el enlace NO debe
+  // devolver ok:true; debe caer en la lógica de canTransition de abajo,
+  // que producirá INVALID_STATE como antes.
+  if (appointment.emailVerifiedAt && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED')) {
     return { ok: true, appointment, pendingApproval: appointment.business.manualApproval };
   }
 
