@@ -1,11 +1,12 @@
 import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
 import type { EmailMessage, EmailSender } from './types';
-import { buildConfirmUrl } from './urls';
+import { buildConfirmUrl, buildCancelUrl } from './urls';
 import { BookingConfirmationEmail } from './templates/BookingConfirmationEmail';
 import { BookingPendingApprovalEmail } from './templates/BookingPendingApprovalEmail';
 import { NewPendingRequestEmail } from './templates/NewPendingRequestEmail';
 import { CancellationConfirmationEmail } from './templates/CancellationConfirmationEmail';
 import { CancellationNoticeToBusinessEmail } from './templates/CancellationNoticeToBusinessEmail';
+import { ReminderEmail } from './templates/ReminderEmail';
 
 export interface AppointmentEmailAppointment {
   id: string;
@@ -149,6 +150,30 @@ export async function sendCancellationNoticeToBusinessEmail(
         serviceName={ctx.service.name}
         employeeName={ctx.employee.name}
         startLabel={formatAppointmentDateTime(ctx.appointment.start)}
+      />
+    ),
+  };
+
+  return trySend(emailSender, message);
+}
+
+export async function sendReminderEmail(
+  emailSender: EmailSender,
+  ctx: AppointmentEmailContext
+): Promise<{ ok: boolean }> {
+  const message: EmailMessage = {
+    to: ctx.appointment.customerEmail,
+    subject: `Recordatorio: tu cita en ${ctx.business.name} es mañana`,
+    react: (
+      <ReminderEmail
+        businessName={ctx.business.name}
+        accentColor={ctx.business.accentColor}
+        logoUrl={ctx.business.logoUrl}
+        customerName={ctx.appointment.customerName}
+        serviceName={ctx.service.name}
+        employeeName={ctx.employee.name}
+        startLabel={formatAppointmentDateTime(ctx.appointment.start)}
+        cancelUrl={buildCancelUrl(ctx.appointment.cancelToken)}
       />
     ),
   };

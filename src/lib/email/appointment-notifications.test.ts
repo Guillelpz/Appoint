@@ -7,6 +7,7 @@ import {
   sendNewPendingRequestEmail,
   sendCancellationConfirmationEmail,
   sendCancellationNoticeToBusinessEmail,
+  sendReminderEmail,
   type AppointmentEmailContext,
 } from './appointment-notifications';
 
@@ -140,5 +141,21 @@ describe('sendCancellationNoticeToBusinessEmail', () => {
 
     expect(result.ok).toBe(false);
     expect(sender.sent).toHaveLength(0);
+  });
+});
+
+describe('sendReminderEmail', () => {
+  it('envía al cliente con el enlace de cancelación', async () => {
+    const sender = new FakeEmailSender();
+
+    const result = await sendReminderEmail(sender, BASE_CTX);
+
+    expect(result.ok).toBe(true);
+    expect(sender.sent).toHaveLength(1);
+    expect(sender.sent[0].to).toBe('ana@example.com');
+
+    const text = await render(sender.sent[0].react, { plainText: true });
+    expect(text).toContain('http://localhost:3000/cita/cancel-token-456');
+    expect(text).toContain('Corte de mujer');
   });
 });
