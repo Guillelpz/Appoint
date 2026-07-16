@@ -41,6 +41,15 @@ describe('getAppointmentByConfirmToken', () => {
     expect(summary?.status).toBe('PENDING');
   });
 
+  it('incluye createdAt y emailVerifiedAt (null si aún no se ha confirmado)', async () => {
+    const { appointment } = await createTestAppointment();
+
+    const summary = await getAppointmentByConfirmToken(prisma, appointment.confirmToken);
+
+    expect(summary?.createdAt).toBeInstanceOf(Date);
+    expect(summary?.emailVerifiedAt).toBeNull();
+  });
+
   it('devuelve null si el token no existe', async () => {
     const summary = await getAppointmentByConfirmToken(prisma, 'token-inexistente');
     expect(summary).toBeNull();

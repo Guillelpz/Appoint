@@ -5,6 +5,8 @@ export interface PublicAppointmentSummary {
   status: string;
   start: Date;
   end: Date;
+  createdAt: Date;
+  emailVerifiedAt: Date | null;
   customerName: string;
   serviceName: string;
   employeeName: string;
@@ -19,6 +21,8 @@ interface RawAppointment {
   status: string;
   start: Date;
   end: Date;
+  createdAt: Date;
+  emailVerifiedAt: Date | null;
   customerName: string;
   cancelToken: string;
   confirmToken: string;
@@ -33,6 +37,8 @@ function toSummary(appointment: RawAppointment): PublicAppointmentSummary {
     status: appointment.status,
     start: appointment.start,
     end: appointment.end,
+    createdAt: appointment.createdAt,
+    emailVerifiedAt: appointment.emailVerifiedAt,
     customerName: appointment.customerName,
     serviceName: appointment.service.name,
     employeeName: appointment.employee.name,
