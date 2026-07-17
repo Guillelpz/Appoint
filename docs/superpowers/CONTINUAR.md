@@ -1,11 +1,11 @@
 # Continuación del proyecto — estado y siguientes pasos
 
-_Actualizado: 2026-07-16 tras completar la Fase 4 (emails y recordatorios) en la rama `fase-4-emails` (revisión global de rama y merge a `main` pendientes al escribir esto)._
+_Actualizado: 2026-07-17 tras completar la Fase 4 (emails y recordatorios): revisión global aprobada (opus, "Ready to merge") y rama `fase-4-emails` mergeada a `main` (`c5ddcde`) y pusheada a origin._
 
 ## Estado actual
 
 - **Hecho**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`), Fase 3 (página pública, mergeada 2026-07-16) y **Fase 4 (emails y recordatorios)**: capa de envío intercambiable (`ResendEmailSender`/`ConsoleEmailSender` según `RESEND_API_KEY`), plantillas React Email (confirmación, solicitud pendiente de aprobación, nueva solicitud al negocio, cancelación al cliente y al negocio, recordatorio 24h), doble paso de `manualApproval` (`Appointment.emailVerifiedAt`: confirmar por token ya no equivale a aprobar la cita cuando `manualApproval` está activo), expiración perezosa corregida (una `PENDING` con `emailVerifiedAt` fijado ya no caduca ni se libera automáticamente), `/confirmar/{token}` ya no auto-confirma en `GET` (botón + Server Action), y cron horario `/api/cron/reminders` protegido por `CRON_SECRET`.
-- **Verificación**: 201/201 tests Vitest contra Postgres real + 1 e2e Playwright (actualizado para pulsar el botón de confirmar) + lint + build, todo en verde (2026-07-16).
+- **Verificación**: 207/207 tests Vitest contra Postgres real + 1 e2e Playwright (actualizado para pulsar el botón de confirmar) + lint + build, todo en verde; re-verificado sobre `main` tras el merge (2026-07-17).
 - **Proceso usado**: superpowers — writing-plans → subagent-driven-development (ledger en `.superpowers/sdd/progress.md`, gitignorado; si no existe, este documento es la fuente de verdad). Cada tarea pasó revisión por subagente; los hallazgos Important se corrigieron en el momento (idempotencias atómicas en cancelación y recordatorios, estado actual en la idempotencia de `confirmAppointment`, normalización de `APP_BASE_URL`).
 - **Política de modelos** (petición del usuario): haiku para tareas con código completo en el plan (transcripción), sonnet para integración/entorno y para TODOS los revisores por tarea, opus para la revisión global de rama. El modelo principal solo orquesta.
 
