@@ -173,8 +173,8 @@ model Appointment {
   employeeId      String
   customerId      String
   customerName    String
-  customerPhone   String
-  customerEmail   String
+  customerPhone   String?
+  customerEmail   String?
   start           DateTime
   end             DateTime
   status          AppointmentStatus @default(PENDING)
@@ -200,8 +200,8 @@ model Customer {
   id               String   @id @default(uuid())
   businessId       String
   name             String
-  phone            String
-  email            String
+  phone            String?
+  email            String?
   registered       Boolean  @default(false)
   marketingConsent Boolean  @default(false)
   createdAt        DateTime @default(now())
