@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
 import { createAppointment } from '@/lib/booking/create-appointment';
@@ -32,6 +32,36 @@ async function createConfirmedAppointment(start: Date, customerEmail: string) {
   return { seed, appointment: confirmed.appointment };
 }
 
+// Inserción directa (sin pasar por createAppointment) para no depender del
+// horario laboral del empleado: útil para probar los límites de la ventana
+// de sendDueReminders sin que las reglas de disponibilidad interfieran.
+async function createDirectConfirmedAppointment(start: Date, customerEmail: string) {
+  const seed = await seedDemoBusiness(prisma);
+  const customer = await prisma.customer.create({
+    data: {
+      businessId: seed.business.id,
+      name: 'Cliente recordatorio directo',
+      phone: '+34688000034',
+      email: customerEmail,
+    },
+  });
+  const appointment = await prisma.appointment.create({
+    data: {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      customerEmail: customer.email,
+      start,
+      end: new Date(start.getTime() + 30 * 60 * 1000),
+      status: 'CONFIRMED',
+    },
+  });
+  return { seed, appointment };
+}
+
 describe('sendDueReminders', () => {
   it('envía recordatorio y marca reminderSentAt para una cita CONFIRMED que empieza entre now+24h y now+25h', async () => {
     const start = new Date(NOW.getTime() + 24.5 * 60 * 60 * 1000);
@@ -48,7 +78,7 @@ describe('sendDueReminders', () => {
     expect(refreshed.reminderSentAt).not.toBeNull();
   });
 
-  it('no envía recordatorio a una cita que empieza fuera de la ventana [now+24h, now+25h)', async () => {
+  it('no envía recordatorio a una cita que empieza fuera de la ventana [now+23h, now+25h)', async () => {
     const start = new Date(NOW.getTime() + 26 * 60 * 60 * 1000); // fuera de ventana
     const { appointment } = await createConfirmedAppointment(start, 'recordatorio-fuera@example.com');
     const emailSender = new FakeEmailSender();
@@ -160,7 +190,7 @@ describe('sendDueReminders', () => {
     expect(refreshed.reminderSentAt).toBeNull();
   });
 
-  it('incluye una cita cuyo inicio cae exactamente en now+24h (límite inferior de la ventana)', async () => {
+  it('incluye una cita cuyo inicio cae exactamente en now+24h (dentro de la ventana, entre ambos límites)', async () => {
     const start = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
     const { appointment } = await createConfirmedAppointment(start, 'recordatorio-limite-inferior@example.com');
     const emailSender = new FakeEmailSender();
@@ -172,6 +202,34 @@ describe('sendDueReminders', () => {
 
     const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
     expect(refreshed.reminderSentAt).not.toBeNull();
+  });
+
+  it('incluye una cita cuyo inicio cae exactamente en now+23h (nuevo límite inferior de la ventana)', async () => {
+    const start = new Date(NOW.getTime() + 23 * 60 * 60 * 1000);
+    const { appointment } = await createDirectConfirmedAppointment(start, 'recordatorio-limite-inferior-ampliado@example.com');
+    const emailSender = new FakeEmailSender();
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender });
+
+    expect(result.sent).toBe(1);
+    expect(emailSender.sent).toHaveLength(1);
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.reminderSentAt).not.toBeNull();
+  });
+
+  it('excluye una cita cuyo inicio cae exactamente en now+22h (justo por debajo del nuevo límite inferior)', async () => {
+    const start = new Date(NOW.getTime() + 22 * 60 * 60 * 1000);
+    const { appointment } = await createDirectConfirmedAppointment(start, 'recordatorio-limite-inferior-fuera@example.com');
+    const emailSender = new FakeEmailSender();
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender });
+
+    expect(result.sent).toBe(0);
+    expect(emailSender.sent).toHaveLength(0);
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.reminderSentAt).toBeNull();
   });
 
   it('excluye una cita cuyo inicio cae exactamente en now+25h (límite superior de la ventana, exclusivo)', async () => {
@@ -240,5 +298,36 @@ describe('sendDueReminders', () => {
 
     const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
     expect(refreshed.reminderSentAt).not.toBeNull();
+  });
+
+  it('no envía ni marca reminderSentAt si la cita fue cancelada entre la selección (findMany) y el reclamo atómico', async () => {
+    const start = new Date(NOW.getTime() + 24.5 * 60 * 60 * 1000);
+    const { appointment } = await createConfirmedAppointment(start, 'recordatorio-cancelada-en-carrera@example.com');
+    const emailSender = new FakeEmailSender();
+
+    // Simula la carrera: findMany devuelve una foto de la cita tomada
+    // mientras seguía CONFIRMED (tal y como la habría seleccionado en un
+    // escenario real justo antes de que otra petición la cancelase), pero
+    // en la base de datos ya está CANCELLED cuando se ejecuta el reclamo
+    // atómico (updateMany). Sin el filtro status: 'CONFIRMED' en el where
+    // del claim, este mock reproduciría el envío indebido de un
+    // recordatorio a una cita ya cancelada.
+    const staleSnapshot = await prisma.appointment.findUniqueOrThrow({
+      where: { id: appointment.id },
+      include: { service: true, employee: true, business: true },
+    });
+    await prisma.appointment.update({ where: { id: appointment.id }, data: { status: 'CANCELLED' } });
+    const findManySpy = vi.spyOn(prisma.appointment, 'findMany').mockResolvedValueOnce([staleSnapshot] as never);
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender });
+
+    findManySpy.mockRestore();
+
+    expect(result.sent).toBe(0);
+    expect(emailSender.sent).toHaveLength(0);
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.reminderSentAt).toBeNull();
+    expect(refreshed.status).toBe('CANCELLED');
   });
 });

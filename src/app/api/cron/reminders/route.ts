@@ -9,6 +9,11 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
-  const result = await sendDueReminders(prisma);
-  return NextResponse.json({ sent: result.sent });
+  try {
+    const result = await sendDueReminders(prisma);
+    return NextResponse.json({ sent: result.sent });
+  } catch (error) {
+    console.error('[cron/reminders]', error);
+    return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+  }
 }

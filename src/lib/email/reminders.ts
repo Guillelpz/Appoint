@@ -3,7 +3,12 @@ import { getEmailSender } from './get-email-sender';
 import type { EmailSender } from './types';
 import { sendReminderEmail } from './appointment-notifications';
 
-const REMINDER_WINDOW_START_HOURS = 24;
+// Ventana ampliada a 2h (en vez de 1h) a propósito: si una ejecución horaria
+// del cron falla o se salta, la siguiente pasada (una hora después) todavía
+// encuentra la cita dentro de la ventana y la recupera. El claim atómico con
+// reminderSentAt: null en el where hace que el solapamiento entre pasadas sea
+// seguro (a lo sumo un envío por cita).
+const REMINDER_WINDOW_START_HOURS = 23;
 const REMINDER_WINDOW_END_HOURS = 25;
 
 export interface SendDueRemindersParams {
@@ -41,8 +46,14 @@ export async function sendDueReminders(
     // de que ninguna la marque), este updateMany con reminderSentAt: null en
     // el where hace que como mucho una de las dos consiga count === 1. La
     // otra ve count === 0 y la salta, evitando el envío duplicado.
+    //
+    // status: 'CONFIRMED' también se repite aquí (no solo en el findMany de
+    // arriba) porque entre la selección y este claim la cita podría haberse
+    // cancelado (p. ej. el cliente cancela justo en ese intervalo); sin este
+    // filtro el claim tendría éxito igualmente y se enviaría un recordatorio
+    // a una cita ya cancelada.
     const claim = await prisma.appointment.updateMany({
-      where: { id: appointment.id, reminderSentAt: null },
+      where: { id: appointment.id, status: 'CONFIRMED', reminderSentAt: null },
       data: { reminderSentAt: now },
     });
 
