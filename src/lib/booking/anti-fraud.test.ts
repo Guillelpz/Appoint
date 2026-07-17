@@ -40,8 +40,8 @@ describe('checkActiveAppointmentLimit', () => {
 
     const allowed = await checkActiveAppointmentLimit(prisma, {
       businessId: seed.business.id,
-      phone: customer.phone,
-      email: customer.email,
+      phone: customer.phone!,
+      email: customer.email!,
       now,
     });
 
@@ -93,8 +93,8 @@ describe('checkActiveAppointmentLimit', () => {
 
     const allowed = await checkActiveAppointmentLimit(prisma, {
       businessId: seed.business.id,
-      phone: customer.phone,
-      email: customer.email,
+      phone: customer.phone!,
+      email: customer.email!,
       now,
     });
 
@@ -147,8 +147,8 @@ describe('checkActiveAppointmentLimit', () => {
 
     const allowed = await checkActiveAppointmentLimit(prisma, {
       businessId: seed.business.id,
-      phone: customer.phone,
-      email: customer.email,
+      phone: customer.phone!,
+      email: customer.email!,
       now,
     });
 
@@ -187,8 +187,8 @@ describe('checkNoOverlapForCustomer', () => {
 
     const allowed = await checkNoOverlapForCustomer(prisma, {
       businessId: seed.business.id,
-      phone: customer.phone,
-      email: customer.email,
+      phone: customer.phone!,
+      email: customer.email!,
       start: new Date('2026-07-14T14:00:00.000Z'),
       end: new Date('2026-07-14T14:35:00.000Z'),
       now,
@@ -227,8 +227,8 @@ describe('checkNoOverlapForCustomer', () => {
 
     const allowed = await checkNoOverlapForCustomer(prisma, {
       businessId: seed.business.id,
-      phone: customer.phone,
-      email: customer.email,
+      phone: customer.phone!,
+      email: customer.email!,
       start: new Date('2026-07-14T08:20:00.000Z'), // solapa con 08:00-08:35
       end: new Date('2026-07-14T08:55:00.000Z'),
       now,

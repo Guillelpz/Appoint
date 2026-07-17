@@ -61,6 +61,13 @@ export async function sendDueReminders(
       continue;
     }
 
+    if (!appointment.customerEmail) {
+      // Cita MANUAL sin email de contacto: no hay a quién recordar. El
+      // claim atómico de arriba ya ha fijado reminderSentAt, así que no se
+      // reintentará en pasadas futuras del cron.
+      continue;
+    }
+
     const result = await sendReminderEmail(emailSender, {
       appointment,
       service: appointment.service,

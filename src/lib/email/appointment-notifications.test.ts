@@ -24,7 +24,7 @@ const BASE_CTX: AppointmentEmailContext = {
   },
   service: { name: 'Corte de mujer' },
   employee: { name: 'Marta Ruiz' },
-  business: { name: 'Salón Aura', email: 'hola@salonaura.example', accentColor: '#B25539', logoUrl: null },
+  business: { name: 'Salón Aura', email: 'hola@salonaura.example', accentColor: '#B25539', logoUrl: null, slug: 'salon-aura' },
 };
 
 describe('sendBookingConfirmationEmail', () => {
@@ -161,5 +161,53 @@ describe('sendReminderEmail', () => {
     const text = await render(sender.sent[0].react, { plainText: true });
     expect(text).toContain('http://localhost:3000/cita/cancel-token-456');
     expect(text).toContain('Corte de mujer');
+  });
+});
+
+describe('guardas de contacto opcional (citas MANUAL sin email)', () => {
+  const ctxSinCustomerEmail: AppointmentEmailContext = {
+    ...BASE_CTX,
+    appointment: { ...BASE_CTX.appointment, customerEmail: null },
+  };
+
+  it('sendBookingConfirmationEmail no envía ni lanza si no hay email de cliente', async () => {
+    const sender = new FakeEmailSender();
+    const result = await sendBookingConfirmationEmail(sender, ctxSinCustomerEmail);
+    expect(result.ok).toBe(false);
+    expect(sender.sent).toHaveLength(0);
+  });
+
+  it('sendBookingPendingApprovalEmail no envía ni lanza si no hay email de cliente', async () => {
+    const sender = new FakeEmailSender();
+    const result = await sendBookingPendingApprovalEmail(sender, ctxSinCustomerEmail);
+    expect(result.ok).toBe(false);
+    expect(sender.sent).toHaveLength(0);
+  });
+
+  it('sendCancellationConfirmationEmail no envía ni lanza si no hay email de cliente', async () => {
+    const sender = new FakeEmailSender();
+    const result = await sendCancellationConfirmationEmail(sender, ctxSinCustomerEmail);
+    expect(result.ok).toBe(false);
+    expect(sender.sent).toHaveLength(0);
+  });
+
+  it('sendReminderEmail no envía ni lanza si no hay email de cliente', async () => {
+    const sender = new FakeEmailSender();
+    const result = await sendReminderEmail(sender, ctxSinCustomerEmail);
+    expect(result.ok).toBe(false);
+    expect(sender.sent).toHaveLength(0);
+  });
+
+  it('sendNewPendingRequestEmail y sendCancellationNoticeToBusinessEmail muestran "No indicado" si falta el teléfono o el email del cliente', async () => {
+    const sender = new FakeEmailSender();
+    const ctxSinContactoCliente: AppointmentEmailContext = {
+      ...BASE_CTX,
+      appointment: { ...BASE_CTX.appointment, customerPhone: null, customerEmail: null },
+    };
+
+    const result = await sendNewPendingRequestEmail(sender, ctxSinContactoCliente);
+    expect(result.ok).toBe(true);
+    const text = await render(sender.sent[0].react, { plainText: true });
+    expect(text).toContain('No indicado');
   });
 });

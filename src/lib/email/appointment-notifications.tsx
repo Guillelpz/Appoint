@@ -11,8 +11,8 @@ import { ReminderEmail } from './templates/ReminderEmail';
 export interface AppointmentEmailAppointment {
   id: string;
   customerName: string;
-  customerEmail: string;
-  customerPhone: string;
+  customerEmail: string | null;
+  customerPhone: string | null;
   confirmToken: string;
   cancelToken: string;
   start: Date;
@@ -31,6 +31,7 @@ export interface AppointmentEmailBusiness {
   email: string | null;
   accentColor: string;
   logoUrl: string | null;
+  slug: string;
 }
 
 export interface AppointmentEmailContext {
@@ -58,6 +59,11 @@ export async function sendBookingConfirmationEmail(
   emailSender: EmailSender,
   ctx: AppointmentEmailContext
 ): Promise<{ ok: boolean }> {
+  if (!ctx.appointment.customerEmail) {
+    console.warn('[email] la cita no tiene email de cliente, no se envía', { appointmentId: ctx.appointment.id });
+    return { ok: false };
+  }
+
   const message: EmailMessage = {
     to: ctx.appointment.customerEmail,
     subject: `Confirma tu cita en ${ctx.business.name}`,
@@ -82,6 +88,11 @@ export async function sendBookingPendingApprovalEmail(
   emailSender: EmailSender,
   ctx: AppointmentEmailContext
 ): Promise<{ ok: boolean }> {
+  if (!ctx.appointment.customerEmail) {
+    console.warn('[email] la cita no tiene email de cliente, no se envía', { appointmentId: ctx.appointment.id });
+    return { ok: false };
+  }
+
   const message: EmailMessage = {
     to: ctx.appointment.customerEmail,
     subject: `Confirma tu email — tu solicitud en ${ctx.business.name} está pendiente de aprobación`,
@@ -106,6 +117,11 @@ export async function sendCancellationConfirmationEmail(
   emailSender: EmailSender,
   ctx: AppointmentEmailContext
 ): Promise<{ ok: boolean }> {
+  if (!ctx.appointment.customerEmail) {
+    console.warn('[email] la cita no tiene email de cliente, no se envía', { appointmentId: ctx.appointment.id });
+    return { ok: false };
+  }
+
   const message: EmailMessage = {
     to: ctx.appointment.customerEmail,
     subject: `Tu cita en ${ctx.business.name} ha sido cancelada`,
@@ -161,6 +177,11 @@ export async function sendReminderEmail(
   emailSender: EmailSender,
   ctx: AppointmentEmailContext
 ): Promise<{ ok: boolean }> {
+  if (!ctx.appointment.customerEmail) {
+    console.warn('[email] la cita no tiene email de cliente, no se envía', { appointmentId: ctx.appointment.id });
+    return { ok: false };
+  }
+
   const message: EmailMessage = {
     to: ctx.appointment.customerEmail,
     subject: `Recordatorio: tu cita en ${ctx.business.name} es mañana`,

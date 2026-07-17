@@ -330,4 +330,38 @@ describe('sendDueReminders', () => {
     expect(refreshed.reminderSentAt).toBeNull();
     expect(refreshed.status).toBe('CANCELLED');
   });
+
+  it('marca reminderSentAt sin enviar email si la cita CONFIRMED no tiene email de cliente (alta manual sin contacto)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const start = new Date(NOW.getTime() + 24.5 * 60 * 60 * 1000);
+    const customer = await prisma.customer.create({
+      data: { businessId: seed.business.id, name: 'Cliente manual sin email', phone: null, email: null },
+    });
+    const appointment = await prisma.appointment.create({
+      data: {
+        businessId: seed.business.id,
+        serviceId: seed.services.corteHombre.id,
+        employeeId: seed.employees.marta.id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: null,
+        customerEmail: null,
+        start,
+        end: new Date(start.getTime() + 30 * 60 * 1000),
+        status: 'CONFIRMED',
+        source: 'MANUAL',
+      },
+    });
+    const emailSender = new FakeEmailSender();
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender });
+
+    expect(result.sent).toBe(0);
+    expect(emailSender.sent).toHaveLength(0);
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    // Se marca como "recordada" aunque no se haya enviado nada: no hay a
+    // quién recordar, y así no se reintenta en cada pasada futura del cron.
+    expect(refreshed.reminderSentAt).not.toBeNull();
+  });
 });

@@ -6,8 +6,8 @@ export interface NewPendingRequestEmailProps {
   accentColor: string;
   logoUrl: string | null;
   customerName: string;
-  customerPhone: string;
-  customerEmail: string;
+  customerPhone: string | null;
+  customerEmail: string | null;
   serviceName: string;
   employeeName: string;
   startLabel: string;
@@ -44,9 +44,9 @@ export function NewPendingRequestEmail({
       <Text>
         <strong>Cliente:</strong> {customerName}
         <br />
-        <strong>Teléfono:</strong> {customerPhone}
+        <strong>Teléfono:</strong> {customerPhone ?? 'No indicado'}
         <br />
-        <strong>Email:</strong> {customerEmail}
+        <strong>Email:</strong> {customerEmail ?? 'No indicado'}
       </Text>
       <Text style={{ fontSize: 12, color: '#6b7280' }}>
         El cliente debe confirmar su email antes de que la solicitud pueda aprobarse.

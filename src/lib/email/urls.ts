@@ -9,3 +9,7 @@ export function buildConfirmUrl(token: string): string {
 export function buildCancelUrl(token: string): string {
   return `${getAppBaseUrl()}/cita/${token}`;
 }
+
+export function buildBusinessBookingUrl(slug: string): string {
+  return `${getAppBaseUrl()}/${slug}`;
+}
