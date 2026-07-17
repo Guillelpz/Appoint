@@ -1,5 +1,5 @@
 import type { CreateAppointmentFailureReason } from '@/lib/booking/create-appointment';
-import type { ConfirmAppointmentFailureReason, CancelAppointmentFailureReason } from '@/lib/booking/tokens';
+import type { CancelAppointmentFailureReason } from '@/lib/booking/tokens';
 
 export const INVALID_INPUT_MESSAGE =
   'Revisa tus datos: necesitamos tu nombre y un teléfono y un email válidos para reservar.';
@@ -26,21 +26,6 @@ export function getBookingErrorMessage(reason: CreateAppointmentFailureReason): 
       return 'No encontramos este negocio. Puede que el enlace ya no esté disponible.';
     case 'SERVICE_NOT_FOUND':
       return 'Este servicio ya no está disponible.';
-    default: {
-      const exhaustiveCheck: never = reason;
-      return exhaustiveCheck;
-    }
-  }
-}
-
-export function getConfirmErrorMessage(reason: ConfirmAppointmentFailureReason): string {
-  switch (reason) {
-    case 'NOT_FOUND':
-      return 'No encontramos ninguna cita con este enlace. Puede que ya haya sido usado o que el enlace no sea correcto.';
-    case 'EXPIRED':
-      return 'El enlace de confirmación ha caducado (han pasado más de 30 minutos desde la reserva). El hueco ya se ha liberado: puedes volver a reservar.';
-    case 'INVALID_STATE':
-      return 'Esta cita ya no se puede confirmar (puede que ya estuviera confirmada, cancelada o completada).';
     default: {
       const exhaustiveCheck: never = reason;
       return exhaustiveCheck;

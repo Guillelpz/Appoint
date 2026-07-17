@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
-import { canTransition, completeAppointment, markNoShow } from './state';
+import { canTransition, completeAppointment, markNoShow, CANCELLABLE_STATUSES } from './state';
 
 async function createConfirmedAppointment() {
   const seed = await seedDemoBusiness(prisma);
@@ -44,6 +44,17 @@ describe('canTransition', () => {
     expect(canTransition('COMPLETED', 'CONFIRMED')).toBe(false);
     expect(canTransition('CANCELLED', 'CONFIRMED')).toBe(false);
     expect(canTransition('NO_SHOW', 'COMPLETED')).toBe(false);
+  });
+});
+
+describe('CANCELLABLE_STATUSES', () => {
+  it('incluye exactamente los estados desde los que canTransition permite pasar a CANCELLED', () => {
+    expect([...CANCELLABLE_STATUSES].sort()).toEqual(['CONFIRMED', 'PENDING'].sort());
+    expect(canTransition('PENDING', 'CANCELLED')).toBe(true);
+    expect(canTransition('CONFIRMED', 'CANCELLED')).toBe(true);
+    expect(canTransition('COMPLETED', 'CANCELLED')).toBe(false);
+    expect(canTransition('CANCELLED', 'CANCELLED')).toBe(false);
+    expect(canTransition('NO_SHOW', 'CANCELLED')).toBe(false);
   });
 });
 

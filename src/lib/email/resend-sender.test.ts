@@ -48,4 +48,13 @@ describe('ResendEmailSender', () => {
       sender.send({ to: 'cliente@example.com', subject: 'Asunto', react: createElement('div', null, 'Hola') })
     ).rejects.toThrow('clave inválida');
   });
+
+  it('usa un mensaje de fallback si el error de Resend no trae message', async () => {
+    sendMock.mockResolvedValue({ data: null, error: {} });
+    const sender = new ResendEmailSender('re_test_key');
+
+    await expect(
+      sender.send({ to: 'cliente@example.com', subject: 'Asunto', react: createElement('div', null, 'Hola') })
+    ).rejects.toThrow('desconocido');
+  });
 });

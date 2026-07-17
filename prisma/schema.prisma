@@ -167,24 +167,24 @@ model TimeOff {
 // intenta eliminar ese índice manual (no está descrito en este schema) y
 // quita esa sentencia antes de aplicarlo.
 model Appointment {
-  id            String            @id @default(uuid())
-  businessId    String
-  serviceId     String
-  employeeId    String
-  customerId    String
-  customerName  String
-  customerPhone String
-  customerEmail String
-  start         DateTime
-  end           DateTime
-  status        AppointmentStatus @default(PENDING)
-  confirmToken  String            @unique @default(uuid())
-  cancelToken   String            @unique @default(uuid())
+  id              String            @id @default(uuid())
+  businessId      String
+  serviceId       String
+  employeeId      String
+  customerId      String
+  customerName    String
+  customerPhone   String
+  customerEmail   String
+  start           DateTime
+  end             DateTime
+  status          AppointmentStatus @default(PENDING)
+  confirmToken    String            @unique @default(uuid())
+  cancelToken     String            @unique @default(uuid())
   emailVerifiedAt DateTime?
   reminderSentAt  DateTime?
-  source        AppointmentSource @default(WEB)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  source          AppointmentSource @default(WEB)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   service  Service  @relation(fields: [serviceId], references: [id])

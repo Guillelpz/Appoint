@@ -12,7 +12,10 @@ export interface EmailLayoutProps {
 export function EmailLayout({ previewText, businessName, accentColor, logoUrl, children }: EmailLayoutProps) {
   return (
     <Html lang="es">
-      <Head />
+      <Head>
+        <meta name="color-scheme" content="light" />
+        <meta name="supported-color-schemes" content="light" />
+      </Head>
       <Preview>{previewText}</Preview>
       <Body
         style={{

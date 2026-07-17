@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@react-email/render';
+import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
 import { FakeEmailSender } from '../../test/fake-email-sender';
 import {
   sendBookingConfirmationEmail,
@@ -78,12 +79,15 @@ describe('sendNewPendingRequestEmail', () => {
     expect(result.ok).toBe(true);
     expect(sender.sent).toHaveLength(1);
     expect(sender.sent[0].to).toBe('hola@salonaura.example');
+    expect(sender.sent[0].subject).toBe('Nueva solicitud de cita pendiente de aprobación');
 
     const text = await render(sender.sent[0].react, { plainText: true });
     expect(text).toContain('Ana López');
     expect(text).toContain('+34600111222');
     expect(text).toContain('ana@example.com');
     expect(text).toContain('Corte de mujer');
+    expect(text).toContain('Marta Ruiz');
+    expect(text).toContain(formatAppointmentDateTime(BASE_CTX.appointment.start));
   });
 
   it('devuelve ok:false sin lanzar si el negocio no tiene email configurado', async () => {

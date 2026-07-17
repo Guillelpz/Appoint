@@ -13,6 +13,8 @@ describe('EmailLayout', () => {
 
     expect(html).toContain('Salón Aura');
     expect(html).toContain('Contenido');
+    expect(html).toContain('name="color-scheme" content="light"');
+    expect(html).toContain('name="supported-color-schemes" content="light"');
   });
 
   it('renderiza sin lanzar cuando se indica un logoUrl', async () => {

@@ -12,6 +12,14 @@ export function canTransition(from: AppointmentStatus, to: AppointmentStatus): b
   return ALLOWED_TRANSITIONS[from].includes(to);
 }
 
+// Estados desde los que se puede transicionar a CANCELLED, derivados de
+// ALLOWED_TRANSITIONS. Se exporta para que el claim atómico de
+// cancellation-service.ts reutilice exactamente esta lista en su `where` en
+// vez de mantener una copia manual que podría divergir de esta tabla.
+export const CANCELLABLE_STATUSES = (Object.keys(ALLOWED_TRANSITIONS) as AppointmentStatus[]).filter((status) =>
+  ALLOWED_TRANSITIONS[status].includes('CANCELLED')
+) as readonly AppointmentStatus[];
+
 export type TransitionAppointmentFailureReason = 'NOT_FOUND' | 'INVALID_TRANSITION';
 
 export type TransitionAppointmentResult =

@@ -21,7 +21,7 @@ export class ResendEmailSender implements EmailSender {
     });
 
     if (result.error) {
-      throw new Error(`Error de Resend: ${result.error.message}`);
+      throw new Error(`Error de Resend: ${result.error.message ?? 'desconocido'}`);
     }
   }
 }

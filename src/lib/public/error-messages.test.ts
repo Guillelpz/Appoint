@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getBookingErrorMessage, getConfirmErrorMessage, getCancelErrorMessage } from './error-messages';
+import { getBookingErrorMessage, getCancelErrorMessage } from './error-messages';
 import type { CreateAppointmentFailureReason } from '@/lib/booking/create-appointment';
 
 describe('getBookingErrorMessage', () => {
@@ -23,17 +23,6 @@ describe('getBookingErrorMessage', () => {
 
   it('el mensaje de SLOT_TAKEN anticipa que se proponen otras horas', () => {
     expect(getBookingErrorMessage('SLOT_TAKEN')).toContain('otras horas');
-  });
-});
-
-describe('getConfirmErrorMessage', () => {
-  it('EXPIRED explica que el hueco se ha liberado', () => {
-    expect(getConfirmErrorMessage('EXPIRED')).toContain('liberado');
-  });
-
-  it('NOT_FOUND e INVALID_STATE devuelven mensajes no vacíos', () => {
-    expect(getConfirmErrorMessage('NOT_FOUND').length).toBeGreaterThan(0);
-    expect(getConfirmErrorMessage('INVALID_STATE').length).toBeGreaterThan(0);
   });
 });
 

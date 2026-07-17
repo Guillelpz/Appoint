@@ -33,6 +33,7 @@ Alcance según la spec (`docs/superpowers/specs/2026-07-12-appoint-design.md`):
 - El selector de día renderiza `maxBookingWindowDays` botones (30 por defecto; pesado si un negocio configura ventanas grandes).
 - Pantalla neutra de "no encontrado" duplicada (candidato a extraer un `NeutralErrorScreen` compartido); descarga `.ics` vía data-URI sin verificar en iOS Safari; `img` en vez de `next/image` (sin `remotePatterns`).
 - **Deuda consciente del motor (no tocar sin necesidad)**: TOCTOU en límites anti-fraude fuera de la transacción; `checkRateLimit` acoplado al flujo insertar-antes-de-contar; los tests de carrera aceptan `EMPLOYEE_UNAVAILABLE` además de `SLOT_TAKEN` (pre-check fuera de la transacción).
+- **Diferido a propósito a la Fase 5** (revisión global de la rama `fase-4-emails`): test de NO_SHOW post-verificación y del caso en que `manualApproval` cambia entre la verificación de email y el re-click del cliente; cobertura e2e de la pantalla de doble paso de `/confirmar` (se ejercitará junto con el panel de aprobación); el copy "es mañana" del recordatorio es impreciso en los bordes del día (la ventana ahora es `[now+23h, now+25h)`); comparación no constant-time en `cron-auth` (aceptado: el secreto es de alta entropía).
 
 ## Avisos del motor que siguen vigentes
 

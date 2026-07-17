@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { cancelAppointment, type CancelAppointmentResult } from '@/lib/booking/tokens';
+import { CANCELLABLE_STATUSES } from '@/lib/booking/state';
 import { getEmailSender } from '@/lib/email/get-email-sender';
 import type { EmailSender } from '@/lib/email/types';
 import { sendCancellationConfirmationEmail, sendCancellationNoticeToBusinessEmail } from '@/lib/email/appointment-notifications';
@@ -22,12 +23,12 @@ export async function cancelPublicAppointment(
   // emails (duplicados). Con updateMany + where en status, solo una de las
   // dos consigue count === 1; la otra ve count === 0 y no envía nada.
   //
-  // El where replica exactamente las transiciones que canTransition()
-  // permite hacia CANCELLED (ver src/lib/booking/state.ts): PENDING y
-  // CONFIRMED. El token sigue siendo el único selector (multi-tenant safe,
-  // igual que antes).
+  // El where reutiliza CANCELLABLE_STATUSES (src/lib/booking/state.ts), que
+  // replica exactamente las transiciones que canTransition() permite hacia
+  // CANCELLED, para que ambas listas no puedan divergir. El token sigue
+  // siendo el único selector (multi-tenant safe, igual que antes).
   const claim = await prisma.appointment.updateMany({
-    where: { cancelToken: input.token, status: { in: ['PENDING', 'CONFIRMED'] } },
+    where: { cancelToken: input.token, status: { in: [...CANCELLABLE_STATUSES] } },
     data: { status: 'CANCELLED' },
   });
 
