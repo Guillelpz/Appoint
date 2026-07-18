@@ -40,7 +40,7 @@ export type CreateAppointmentResult =
   | { ok: true; appointment: Appointment }
   | { ok: false; reason: CreateAppointmentFailureReason };
 
-async function isEmployeeAvailableAt(
+export async function isEmployeeAvailableAt(
   prisma: PrismaClient,
   params: { businessId: string; serviceId: string; employeeId: string; start: Date; now: Date }
 ): Promise<boolean> {
