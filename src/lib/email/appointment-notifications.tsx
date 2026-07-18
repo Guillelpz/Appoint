@@ -1,12 +1,15 @@
 import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
 import type { EmailMessage, EmailSender } from './types';
-import { buildConfirmUrl, buildCancelUrl } from './urls';
+import { buildConfirmUrl, buildCancelUrl, buildBusinessBookingUrl } from './urls';
 import { BookingConfirmationEmail } from './templates/BookingConfirmationEmail';
 import { BookingPendingApprovalEmail } from './templates/BookingPendingApprovalEmail';
 import { NewPendingRequestEmail } from './templates/NewPendingRequestEmail';
 import { CancellationConfirmationEmail } from './templates/CancellationConfirmationEmail';
 import { CancellationNoticeToBusinessEmail } from './templates/CancellationNoticeToBusinessEmail';
 import { ReminderEmail } from './templates/ReminderEmail';
+import { AppointmentApprovedEmail } from './templates/AppointmentApprovedEmail';
+import { AppointmentRejectedEmail } from './templates/AppointmentRejectedEmail';
+import { AppointmentCancelledByBusinessEmail } from './templates/AppointmentCancelledByBusinessEmail';
 
 export interface AppointmentEmailAppointment {
   id: string;
@@ -227,6 +230,94 @@ export async function sendNewPendingRequestEmail(
         serviceName={ctx.service.name}
         employeeName={ctx.employee.name}
         startLabel={formatAppointmentDateTime(ctx.appointment.start)}
+      />
+    ),
+  };
+
+  return trySend(emailSender, message);
+}
+
+export async function sendAppointmentApprovedEmail(
+  emailSender: EmailSender,
+  ctx: AppointmentEmailContext
+): Promise<{ ok: boolean }> {
+  if (!ctx.appointment.customerEmail) {
+    console.warn('[email] la cita no tiene email de cliente, no se envía la aprobación', { appointmentId: ctx.appointment.id });
+    return { ok: false };
+  }
+
+  const message: EmailMessage = {
+    to: ctx.appointment.customerEmail,
+    subject: `¡Tu cita está confirmada en ${ctx.business.name}!`,
+    react: (
+      <AppointmentApprovedEmail
+        businessName={ctx.business.name}
+        accentColor={ctx.business.accentColor}
+        logoUrl={ctx.business.logoUrl}
+        customerName={ctx.appointment.customerName}
+        serviceName={ctx.service.name}
+        employeeName={ctx.employee.name}
+        startLabel={formatAppointmentDateTime(ctx.appointment.start)}
+        manageUrl={buildCancelUrl(ctx.appointment.cancelToken)}
+      />
+    ),
+  };
+
+  return trySend(emailSender, message);
+}
+
+export async function sendAppointmentRejectedEmail(
+  emailSender: EmailSender,
+  ctx: AppointmentEmailContext
+): Promise<{ ok: boolean }> {
+  if (!ctx.appointment.customerEmail) {
+    console.warn('[email] la cita no tiene email de cliente, no se envía el rechazo', { appointmentId: ctx.appointment.id });
+    return { ok: false };
+  }
+
+  const message: EmailMessage = {
+    to: ctx.appointment.customerEmail,
+    subject: `No hemos podido confirmar tu cita en ${ctx.business.name}`,
+    react: (
+      <AppointmentRejectedEmail
+        businessName={ctx.business.name}
+        accentColor={ctx.business.accentColor}
+        logoUrl={ctx.business.logoUrl}
+        customerName={ctx.appointment.customerName}
+        serviceName={ctx.service.name}
+        startLabel={formatAppointmentDateTime(ctx.appointment.start)}
+        rebookUrl={buildBusinessBookingUrl(ctx.business.slug)}
+      />
+    ),
+  };
+
+  return trySend(emailSender, message);
+}
+
+export async function sendAppointmentCancelledByBusinessEmail(
+  emailSender: EmailSender,
+  ctx: AppointmentEmailContext
+): Promise<{ ok: boolean }> {
+  if (!ctx.appointment.customerEmail) {
+    console.warn('[email] la cita no tiene email de cliente, no se envía la cancelación del negocio', {
+      appointmentId: ctx.appointment.id,
+    });
+    return { ok: false };
+  }
+
+  const message: EmailMessage = {
+    to: ctx.appointment.customerEmail,
+    subject: `${ctx.business.name} ha cancelado tu cita`,
+    react: (
+      <AppointmentCancelledByBusinessEmail
+        businessName={ctx.business.name}
+        accentColor={ctx.business.accentColor}
+        logoUrl={ctx.business.logoUrl}
+        customerName={ctx.appointment.customerName}
+        serviceName={ctx.service.name}
+        employeeName={ctx.employee.name}
+        startLabel={formatAppointmentDateTime(ctx.appointment.start)}
+        rebookUrl={buildBusinessBookingUrl(ctx.business.slug)}
       />
     ),
   };

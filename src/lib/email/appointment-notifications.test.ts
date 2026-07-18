@@ -9,6 +9,9 @@ import {
   sendCancellationConfirmationEmail,
   sendCancellationNoticeToBusinessEmail,
   sendReminderEmail,
+  sendAppointmentApprovedEmail,
+  sendAppointmentRejectedEmail,
+  sendAppointmentCancelledByBusinessEmail,
   type AppointmentEmailContext,
 } from './appointment-notifications';
 
@@ -209,5 +212,56 @@ describe('guardas de contacto opcional (citas MANUAL sin email)', () => {
     expect(result.ok).toBe(true);
     const text = await render(sender.sent[0].react, { plainText: true });
     expect(text).toContain('No indicado');
+  });
+});
+
+describe('sendAppointmentApprovedEmail', () => {
+  it('envía al cliente con el enlace para ver/cancelar la cita', async () => {
+    const sender = new FakeEmailSender();
+
+    const result = await sendAppointmentApprovedEmail(sender, BASE_CTX);
+
+    expect(result.ok).toBe(true);
+    expect(sender.sent[0].to).toBe('ana@example.com');
+    const text = await render(sender.sent[0].react, { plainText: true });
+    expect(text.toLowerCase()).toContain('confirmada');
+    expect(text).toContain('http://localhost:3000/cita/cancel-token-456');
+  });
+
+  it('no envía ni lanza si no hay email de cliente', async () => {
+    const sender = new FakeEmailSender();
+    const ctx: AppointmentEmailContext = { ...BASE_CTX, appointment: { ...BASE_CTX.appointment, customerEmail: null } };
+
+    const result = await sendAppointmentApprovedEmail(sender, ctx);
+
+    expect(result.ok).toBe(false);
+    expect(sender.sent).toHaveLength(0);
+  });
+});
+
+describe('sendAppointmentRejectedEmail', () => {
+  it('envía al cliente con un enlace para reservar otro horario', async () => {
+    const sender = new FakeEmailSender();
+
+    const result = await sendAppointmentRejectedEmail(sender, BASE_CTX);
+
+    expect(result.ok).toBe(true);
+    expect(sender.sent[0].to).toBe('ana@example.com');
+    const text = await render(sender.sent[0].react, { plainText: true });
+    expect(text).toContain('http://localhost:3000/salon-aura');
+  });
+});
+
+describe('sendAppointmentCancelledByBusinessEmail', () => {
+  it('envía al cliente avisando de que el negocio ha cancelado su cita', async () => {
+    const sender = new FakeEmailSender();
+
+    const result = await sendAppointmentCancelledByBusinessEmail(sender, BASE_CTX);
+
+    expect(result.ok).toBe(true);
+    expect(sender.sent[0].to).toBe('ana@example.com');
+    const text = await render(sender.sent[0].react, { plainText: true });
+    expect(text.toLowerCase()).toContain('cancelad');
+    expect(text).toContain('http://localhost:3000/salon-aura');
   });
 });
