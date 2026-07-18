@@ -3,6 +3,7 @@ import {
   getLocalDateString,
   localMinutesToUtc,
   addDaysToLocalDateString,
+  parseLocalWallTimeToUtc,
   BUSINESS_TIMEZONE,
 } from './timezone';
 
@@ -25,5 +26,17 @@ describe('timezone', () => {
 
   it('suma días a una fecha local en formato YYYY-MM-DD cruzando el fin de mes', () => {
     expect(addDaysToLocalDateString('2026-07-30', 3)).toBe('2026-08-02');
+  });
+});
+
+describe('parseLocalWallTimeToUtc', () => {
+  it('interpreta un string de datetime-local como hora de Europe/Madrid en horario de verano (CEST, UTC+2)', () => {
+    const utc = parseLocalWallTimeToUtc('2026-08-15T09:00');
+    expect(utc.toISOString()).toBe('2026-08-15T07:00:00.000Z');
+  });
+
+  it('interpreta un string de datetime-local como hora de Europe/Madrid en horario de invierno (CET, UTC+1)', () => {
+    const utc = parseLocalWallTimeToUtc('2026-01-15T09:00');
+    expect(utc.toISOString()).toBe('2026-01-15T08:00:00.000Z');
   });
 });

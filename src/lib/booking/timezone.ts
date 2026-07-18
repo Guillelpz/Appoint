@@ -30,3 +30,12 @@ export function addDaysToLocalDateString(localDateStr: string, days: number): st
   const d = String(date.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
+
+// Convierte el valor de un <input type="datetime-local"> ("YYYY-MM-DDTHH:mm",
+// sin zona horaria) a un Date en UTC, interpretándolo como hora local del
+// negocio. Usar `new Date(valorSinZona)` aquí sería un bug: JS lo
+// interpretaría como hora local del PROCESO DE NODE (normalmente UTC en
+// producción), no como hora de Europe/Madrid.
+export function parseLocalWallTimeToUtc(value: string, timezone: string = BUSINESS_TIMEZONE): Date {
+  return fromZonedTime(value, timezone);
+}
