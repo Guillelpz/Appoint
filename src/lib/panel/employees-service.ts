@@ -16,6 +16,18 @@ function isValidEmployeeInput(input: EmployeeInput): boolean {
   return name.length > 0 && name.length <= 120 && HEX_COLOR_PATTERN.test(input.color);
 }
 
+// La tabla ServiceEmployee no tiene businessId ni restricción a nivel de BD que impida
+// enlazar un empleado con un servicio de otro negocio: hay que comprobarlo aquí antes de
+// escribir cualquier enlace.
+async function serviceIdsBelongToBusiness(prisma: PrismaClient, businessId: string, serviceIds: string[]): Promise<boolean> {
+  const uniqueIds = [...new Set(serviceIds)];
+  if (uniqueIds.length === 0) {
+    return true;
+  }
+  const owned = await prisma.service.findMany({ where: { id: { in: uniqueIds }, businessId }, select: { id: true } });
+  return owned.length === uniqueIds.length;
+}
+
 export async function listEmployeesForBusiness(prisma: PrismaClient, businessId: string) {
   return prisma.employee.findMany({
     where: { businessId },
@@ -43,6 +55,9 @@ export async function createEmployeeForBusiness(
   if (!isValidEmployeeInput(input)) {
     return { ok: false, reason: 'INVALID_INPUT' };
   }
+  if (!(await serviceIdsBelongToBusiness(prisma, businessId, input.serviceIds))) {
+    return { ok: false, reason: 'INVALID_INPUT' };
+  }
   const employee = await prisma.employee.create({
     data: {
       businessId,
@@ -55,10 +70,13 @@ export async function createEmployeeForBusiness(
   return { ok: true, employee };
 }
 
-// No usa un claim atómico updateMany-scoped porque esta operación no envía
-// ningún email (a diferencia de aprobar/rechazar/cancelar): el requisito de
-// "toda transición que dispare un email usa claim atómico" no aplica aquí.
-// Sigue escopado por businessId antes de escribir nada.
+// No usa un claim atómico updateMany-scoped como el resto del panel (p.ej.
+// services-service.ts). La comprobación previa (findUnique + businessId) no sufre una
+// ventana TOCTOU real hoy: nada en la aplicación reasigna Employee.businessId una vez
+// creado el empleado, así que no hay ninguna escritura concurrente que pueda "mover" el
+// empleado a otro negocio entre la lectura y el $transaction siguiente. Si en el futuro se
+// permite reasignar el negocio de un empleado, esta función deberá migrar al mismo patrón
+// updateMany-scoped que el resto del panel.
 export async function updateEmployeeForBusiness(
   prisma: PrismaClient,
   businessId: string,
@@ -71,6 +89,9 @@ export async function updateEmployeeForBusiness(
   const existing = await prisma.employee.findUnique({ where: { id: employeeId } });
   if (!existing || existing.businessId !== businessId) {
     return { ok: false, reason: 'NOT_FOUND' };
+  }
+  if (!(await serviceIdsBelongToBusiness(prisma, businessId, input.serviceIds))) {
+    return { ok: false, reason: 'INVALID_INPUT' };
   }
 
   await prisma.$transaction([

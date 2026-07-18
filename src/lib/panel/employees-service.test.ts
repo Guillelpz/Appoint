@@ -38,6 +38,33 @@ describe('createEmployeeForBusiness', () => {
 
     expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
   });
+
+  it('devuelve INVALID_INPUT y no crea enlaces si algún serviceId pertenece a otro negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const otherBusiness = await prisma.business.create({ data: { slug: 'otro-negocio-servicio-ajeno-crear', name: 'Otro', type: 'OTHER' } });
+    const otherService = await prisma.service.create({
+      data: {
+        businessId: otherBusiness.id,
+        name: 'Servicio ajeno',
+        durationMinutes: 30,
+        priceCents: 1000,
+        bufferAfterMinutes: 0,
+        active: true,
+        sortOrder: 1,
+      },
+    });
+
+    const result = await createEmployeeForBusiness(prisma, seed.business.id, {
+      name: 'Laura Gómez',
+      color: '#00AA00',
+      active: true,
+      serviceIds: [seed.services.corteMujer.id, otherService.id],
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+    const links = await prisma.serviceEmployee.findMany({ where: { serviceId: otherService.id } });
+    expect(links).toHaveLength(0);
+  });
 });
 
 describe('listEmployeesForBusiness', () => {
@@ -121,5 +148,36 @@ describe('updateEmployeeForBusiness', () => {
     const untouched = await getEmployeeForBusiness(prisma, seed.business.id, seed.employees.carlos.id);
     expect(untouched?.active).toBe(true);
     expect(untouched?.name).toBe('Carlos Núñez');
+  });
+
+  it('devuelve INVALID_INPUT y no toca los enlaces existentes si algún serviceId pertenece a otro negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const otherBusiness = await prisma.business.create({ data: { slug: 'otro-negocio-servicio-ajeno-actualizar', name: 'Otro', type: 'OTHER' } });
+    const otherService = await prisma.service.create({
+      data: {
+        businessId: otherBusiness.id,
+        name: 'Servicio ajeno',
+        durationMinutes: 30,
+        priceCents: 1000,
+        bufferAfterMinutes: 0,
+        active: true,
+        sortOrder: 1,
+      },
+    });
+
+    const before = await getEmployeeForBusiness(prisma, seed.business.id, seed.employees.carlos.id);
+    const beforeServiceIds = before?.services.map((s) => s.serviceId).sort();
+
+    const result = await updateEmployeeForBusiness(prisma, seed.business.id, seed.employees.carlos.id, {
+      name: 'Carlos Núñez',
+      color: seed.employees.carlos.color,
+      active: true,
+      serviceIds: [otherService.id],
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+    const after = await getEmployeeForBusiness(prisma, seed.business.id, seed.employees.carlos.id);
+    expect(after?.name).toBe('Carlos Núñez');
+    expect(after?.services.map((s) => s.serviceId).sort()).toEqual(beforeServiceIds);
   });
 });
