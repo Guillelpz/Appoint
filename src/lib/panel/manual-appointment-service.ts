@@ -10,6 +10,14 @@ export interface CreateManualAppointmentInput {
   businessId: string;
   serviceId: string;
   employeeId: string;
+  /**
+   * Instante UTC ya resuelto por quien llama (usando
+   * `parseLocalWallTimeToUtc`/`localMinutesToUtc` de
+   * `src/lib/booking/timezone.ts`), nunca `new Date('YYYY-MM-DDTHH:mm')`
+   * sobre hora local de Europe/Madrid. Esta fila se consume tal cual en el
+   * motor de huecos (`slots.ts`): una Date sin convertir corrompe la
+   * disponibilidad en silencio.
+   */
   start: Date;
   customerName: string;
   customerPhone?: string | null;

@@ -11,6 +11,14 @@ export async function listTimeOffForEmployee(prisma: PrismaClient, businessId: s
   return prisma.timeOff.findMany({ where: { employeeId }, orderBy: { start: 'asc' } });
 }
 
+/**
+ * `input.start`/`input.end` deben ser instantes UTC ya resueltos por quien
+ * llama (usando `parseLocalWallTimeToUtc`/`localMinutesToUtc` de
+ * `src/lib/booking/timezone.ts`), nunca `new Date('YYYY-MM-DDTHH:mm')` sobre
+ * hora local de Europe/Madrid. Estas filas se consumen tal cual en el motor
+ * de huecos (`slots.ts`): una Date sin convertir corrompe la disponibilidad
+ * en silencio.
+ */
 export async function createTimeOffForEmployee(
   prisma: PrismaClient,
   businessId: string,
