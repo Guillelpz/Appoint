@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateBookingInput } from './validate-booking-input';
+import { validateBookingInput, validateManualAppointmentInput } from './validate-booking-input';
 
 const VALID_START = new Date('2026-07-14T08:00:00.000Z');
 
@@ -120,5 +120,51 @@ describe('validateBookingInput', () => {
     });
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('validateManualAppointmentInput', () => {
+  it('acepta solo el nombre, sin teléfono ni email', () => {
+    const result = validateManualAppointmentInput({ customerName: '  Ana López  ' });
+    expect(result).toEqual({ ok: true, value: { customerName: 'Ana López', customerPhone: null, customerEmail: null } });
+  });
+
+  it('acepta nombre + teléfono válido, sin email', () => {
+    const result = validateManualAppointmentInput({ customerName: 'Ana López', customerPhone: '+34 600 111 222' });
+    expect(result).toEqual({
+      ok: true,
+      value: { customerName: 'Ana López', customerPhone: '+34600111222', customerEmail: null },
+    });
+  });
+
+  it('acepta nombre + email válido, sin teléfono', () => {
+    const result = validateManualAppointmentInput({ customerName: 'Ana López', customerEmail: 'ANA@Example.com' });
+    expect(result).toEqual({
+      ok: true,
+      value: { customerName: 'Ana López', customerPhone: null, customerEmail: 'ana@example.com' },
+    });
+  });
+
+  it('rechaza un nombre vacío', () => {
+    const result = validateManualAppointmentInput({ customerName: '   ' });
+    expect(result).toEqual({ ok: false });
+  });
+
+  it('rechaza un teléfono con formato inválido si se indica', () => {
+    const result = validateManualAppointmentInput({ customerName: 'Ana López', customerPhone: 'abc' });
+    expect(result).toEqual({ ok: false });
+  });
+
+  it('rechaza un email con formato inválido si se indica', () => {
+    const result = validateManualAppointmentInput({ customerName: 'Ana López', customerEmail: 'no-es-un-email' });
+    expect(result).toEqual({ ok: false });
+  });
+
+  it('trata una cadena vacía de teléfono/email como "no indicado"', () => {
+    const result = validateManualAppointmentInput({ customerName: 'Ana López', customerPhone: '', customerEmail: '' });
+    expect(result).toEqual({
+      ok: true,
+      value: { customerName: 'Ana López', customerPhone: null, customerEmail: null },
+    });
   });
 });
