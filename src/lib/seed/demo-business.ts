@@ -17,6 +17,26 @@ export interface DemoBusinessSeed {
 const WEEKDAYS_TUE_TO_SAT = [2, 3, 4, 5, 6];
 
 export async function seedDemoBusiness(prisma: PrismaClient): Promise<DemoBusinessSeed> {
+  const existingBusiness = await prisma.business.findUnique({ where: { slug: 'salon-aura' } });
+  if (existingBusiness) {
+    console.log(`Negocio demo "${existingBusiness.slug}" ya existe, se omite la creación.`);
+    const [marta, carlos] = await Promise.all([
+      prisma.employee.findFirstOrThrow({ where: { businessId: existingBusiness.id, name: 'Marta Ruiz' } }),
+      prisma.employee.findFirstOrThrow({ where: { businessId: existingBusiness.id, name: 'Carlos Núñez' } }),
+    ]);
+    const [corteMujer, corteHombre, coloracion, peinadoEvento] = await Promise.all([
+      prisma.service.findFirstOrThrow({ where: { businessId: existingBusiness.id, name: 'Corte de mujer' } }),
+      prisma.service.findFirstOrThrow({ where: { businessId: existingBusiness.id, name: 'Corte de hombre' } }),
+      prisma.service.findFirstOrThrow({ where: { businessId: existingBusiness.id, name: 'Coloración' } }),
+      prisma.service.findFirstOrThrow({ where: { businessId: existingBusiness.id, name: 'Peinado de evento' } }),
+    ]);
+    return {
+      business: existingBusiness,
+      employees: { marta, carlos },
+      services: { corteMujer, corteHombre, coloracion, peinadoEvento },
+    };
+  }
+
   const business = await prisma.business.create({
     data: {
       slug: 'salon-aura',

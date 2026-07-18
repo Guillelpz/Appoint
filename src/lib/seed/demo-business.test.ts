@@ -35,4 +35,20 @@ describe('seedDemoBusiness', () => {
     });
     expect(carlosServiceCount).toBe(2);
   });
+
+  it('es idempotente: llamarlo dos veces no duplica el negocio ni sus datos relacionados', async () => {
+    const first = await seedDemoBusiness(prisma);
+    const second = await seedDemoBusiness(prisma);
+
+    expect(second.business.id).toBe(first.business.id);
+
+    const businessCount = await prisma.business.count({ where: { slug: 'salon-aura' } });
+    expect(businessCount).toBe(1);
+
+    const employeeCount = await prisma.employee.count({ where: { businessId: first.business.id } });
+    expect(employeeCount).toBe(2);
+
+    const serviceCount = await prisma.service.count({ where: { businessId: first.business.id } });
+    expect(serviceCount).toBe(4);
+  });
 });
