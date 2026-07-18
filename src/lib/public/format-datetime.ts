@@ -47,18 +47,27 @@ export interface DayOption {
   label: string;
 }
 
+// Etiqueta corta de un día local (YYYY-MM-DD, sin componente horario), p.ej.
+// "lun 20 jul". `localDateStr` ya está en Europe/Madrid (viene de
+// getLocalDateString/addDaysToLocalDateString), así que basta con
+// interpretarlo a mediodía UTC para leer weekday/day/month sin arrastrar
+// desfases de zona horaria.
+export function formatShortDayLabel(localDateStr: string): string {
+  const [, monthStr, dayStr] = localDateStr.split('-');
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  const weekday = new Date(`${localDateStr}T12:00:00Z`).getUTCDay();
+  return `${SHORT_WEEKDAY_NAMES[weekday]} ${day} ${SHORT_MONTH_NAMES[month - 1]}`;
+}
+
 export function buildDayOptions(now: Date, maxDays: number): DayOption[] {
   const options: DayOption[] = [];
   let current = getLocalDateString(now);
 
   for (let i = 0; i < maxDays; i++) {
-    const [, monthStr, dayStr] = current.split('-');
-    const month = Number(monthStr);
-    const day = Number(dayStr);
-    const weekday = new Date(`${current}T12:00:00Z`).getUTCDay();
     options.push({
       localDate: current,
-      label: `${SHORT_WEEKDAY_NAMES[weekday]} ${day} ${SHORT_MONTH_NAMES[month - 1]}`,
+      label: formatShortDayLabel(current),
     });
     current = addDaysToLocalDateString(current, 1);
   }

@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { requirePanelSession } from '@/lib/panel/session';
 import { approvePendingAppointment, rejectPendingAppointment } from '@/lib/panel/approval-service';
@@ -9,34 +10,62 @@ import { cancelAppointmentFromPanel } from '@/lib/panel/cancellation-service';
 import { createManualAppointmentForBusiness } from '@/lib/panel/manual-appointment-service';
 import { getAvailableSlots } from '@/lib/booking/slots';
 
-export async function approveAppointmentAction(appointmentId: string): Promise<void> {
-  const { businessId } = await requirePanelSession();
-  await approvePendingAppointment(prisma, { businessId, appointmentId });
-  revalidatePath('/panel');
+// Las 5 acciones de transición de estado abajo comparten un patrón: si el
+// servicio devuelve `{ ok: false, reason: 'NOT_FOUND' }' (carrera perdida —
+// doble click, pestaña obsoleta, el cliente ya canceló su propia cita, etc.)
+// no queremos fallar en silencio. `revalidatePath` sigue llamándose siempre
+// para refrescar el estado real, y solo en el caso de fallo hacemos un
+// `redirect` explícito de vuelta a la misma vista (fecha/vista se reciben
+// como argumentos "bind-eados" en el formulario, no como datos de sesión)
+// añadiendo `?aviso=accion-no-aplicada`, que la página muestra como un
+// banner descartable.
+function redirectToStaleActionNotice(date: string, view: string): never {
+  redirect(`/panel?date=${date}&view=${view}&aviso=accion-no-aplicada`);
 }
 
-export async function rejectAppointmentAction(appointmentId: string): Promise<void> {
+export async function approveAppointmentAction(appointmentId: string, date: string, view: string): Promise<void> {
   const { businessId } = await requirePanelSession();
-  await rejectPendingAppointment(prisma, { businessId, appointmentId });
+  const result = await approvePendingAppointment(prisma, { businessId, appointmentId });
   revalidatePath('/panel');
+  if (!result.ok) {
+    redirectToStaleActionNotice(date, view);
+  }
 }
 
-export async function completeAppointmentAction(appointmentId: string): Promise<void> {
+export async function rejectAppointmentAction(appointmentId: string, date: string, view: string): Promise<void> {
   const { businessId } = await requirePanelSession();
-  await completeAppointmentFromPanel(prisma, { businessId, appointmentId });
+  const result = await rejectPendingAppointment(prisma, { businessId, appointmentId });
   revalidatePath('/panel');
+  if (!result.ok) {
+    redirectToStaleActionNotice(date, view);
+  }
 }
 
-export async function markNoShowAppointmentAction(appointmentId: string): Promise<void> {
+export async function completeAppointmentAction(appointmentId: string, date: string, view: string): Promise<void> {
   const { businessId } = await requirePanelSession();
-  await markNoShowFromPanel(prisma, { businessId, appointmentId });
+  const result = await completeAppointmentFromPanel(prisma, { businessId, appointmentId });
   revalidatePath('/panel');
+  if (!result.ok) {
+    redirectToStaleActionNotice(date, view);
+  }
 }
 
-export async function cancelAppointmentFromPanelAction(appointmentId: string): Promise<void> {
+export async function markNoShowAppointmentAction(appointmentId: string, date: string, view: string): Promise<void> {
   const { businessId } = await requirePanelSession();
-  await cancelAppointmentFromPanel(prisma, { businessId, appointmentId });
+  const result = await markNoShowFromPanel(prisma, { businessId, appointmentId });
   revalidatePath('/panel');
+  if (!result.ok) {
+    redirectToStaleActionNotice(date, view);
+  }
+}
+
+export async function cancelAppointmentFromPanelAction(appointmentId: string, date: string, view: string): Promise<void> {
+  const { businessId } = await requirePanelSession();
+  const result = await cancelAppointmentFromPanel(prisma, { businessId, appointmentId });
+  revalidatePath('/panel');
+  if (!result.ok) {
+    redirectToStaleActionNotice(date, view);
+  }
 }
 
 export interface ManualSlotOption {
