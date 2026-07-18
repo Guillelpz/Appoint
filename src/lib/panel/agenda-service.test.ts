@@ -73,6 +73,30 @@ describe('getAgendaForBusiness', () => {
     expect(agenda.appointments[0].manualApprovalPending).toBe(true);
   });
 
+  it('no marca manualApprovalPending si la cita PENDING no tiene el email verificado (aún no accionable)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.business.update({ where: { id: seed.business.id }, data: { manualApproval: true } });
+
+    const unverified = await createAppointmentDirect({
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: new Date('2026-07-14T09:00:00.000Z'),
+      status: 'PENDING',
+      emailVerifiedAt: null,
+    });
+
+    const agenda = await getAgendaForBusiness(prisma, {
+      businessId: seed.business.id,
+      dateFromUtc: new Date('2026-07-14T00:00:00.000Z'),
+      dateToUtc: new Date('2026-07-15T00:00:00.000Z'),
+    });
+
+    expect(agenda.appointments).toHaveLength(1);
+    expect(agenda.appointments[0].id).toBe(unverified.id);
+    expect(agenda.appointments[0].manualApprovalPending).toBe(false);
+  });
+
   it('no marca manualApprovalPending si el negocio no tiene manualApproval activo', async () => {
     const seed = await seedDemoBusiness(prisma);
     await createAppointmentDirect({

@@ -26,6 +26,22 @@ export interface AgendaData {
   appointments: AgendaAppointment[];
 }
 
+/**
+ * Consulta la agenda (empleados + citas) de un negocio para un rango de tiempo.
+ *
+ * IMPORTANTE — contrato de zona horaria: `dateFromUtc` y `dateToUtc` DEBEN ser los
+ * límites de un día (o rango de días) local en Europe/Madrid, ya convertidos a UTC
+ * con los helpers de `src/lib/booking/timezone.ts` (`localMinutesToUtc` con minutos
+ * 0 para el inicio, `addDaysToLocalDateString` para calcular el día siguiente/rango
+ * de semana). Nunca construir estos límites con medianoche UTC directa ni con
+ * `new Date('YYYY-MM-DDTHH:mm')` (esa cadena se interpreta en la zona del proceso,
+ * no en Europe/Madrid): un llamador que se salte el helper mostrará el día local
+ * incorrecto de forma silenciosa (sin error, solo citas desplazadas ~1-2h según DST).
+ *
+ * `appointments` incluye deliberadamente TODOS los estados (también CANCELLED y
+ * NO_SHOW): el panel necesita poder mostrarlas en la agenda (p. ej. tachadas), no
+ * solo las activas.
+ */
 export async function getAgendaForBusiness(
   prisma: PrismaClient,
   params: { businessId: string; dateFromUtc: Date; dateToUtc: Date }
@@ -57,7 +73,14 @@ export async function getAgendaForBusiness(
       employeeId: a.employeeId,
       employeeName: a.employee.name,
       source: a.source,
-      manualApprovalPending: a.status === 'PENDING' && business.manualApproval,
+      // "Pendiente de aprobación del negocio" solo aplica a citas PENDING cuyo email
+      // ya fue verificado por el cliente (el paso 2 del diseño de doble verificación,
+      // ver avisos de Fase 5 en CONTINUAR.md). Una PENDING sin emailVerifiedAt aún
+      // espera el clic de confirmación del cliente (o está abandonada/expirada y
+      // ya excluida por activeAppointmentWhere en otros flujos) — no es accionable
+      // por el negocio todavía, así que no lleva el badge, aunque sigue apareciendo
+      // en la lista.
+      manualApprovalPending: a.status === 'PENDING' && business.manualApproval && a.emailVerifiedAt !== null,
     })),
   };
 }
