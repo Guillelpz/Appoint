@@ -244,6 +244,26 @@ describe('createManualAppointmentForBusiness', () => {
     expect(appointmentCount).toBe(0);
   });
 
+  it('rechaza si el servicio está desactivado (el negocio lo apagó y no debe poder darse de alta manualmente sin reactivarlo)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.service.update({ where: { id: seed.services.corteHombre.id }, data: { active: false } });
+
+    const result = await createManualAppointmentForBusiness(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Servicio desactivado',
+      now: NOW,
+      emailSender: new FakeEmailSender(),
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'SERVICE_NOT_FOUND' });
+
+    const appointmentCount = await prisma.appointment.count({ where: { businessId: seed.business.id } });
+    expect(appointmentCount).toBe(0);
+  });
+
   it('rechaza si el employeeId pertenece a otro negocio, aunque esté vinculado al mismo servicio (multi-tenancy)', async () => {
     const seed = await seedDemoBusiness(prisma);
     const otherBusiness = await prisma.business.create({

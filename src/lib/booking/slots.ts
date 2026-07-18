@@ -102,7 +102,7 @@ export async function getAvailableSlots(
     return [];
   }
   const service = await prisma.service.findUnique({ where: { id: params.serviceId } });
-  if (!service || service.businessId !== params.businessId) {
+  if (!service || service.businessId !== params.businessId || !service.active) {
     return [];
   }
 

@@ -88,7 +88,7 @@ export async function createManualAppointmentForBusiness(
   }
 
   const service = await prisma.service.findUnique({ where: { id: input.serviceId } });
-  if (!service || service.businessId !== input.businessId) {
+  if (!service || service.businessId !== input.businessId || !service.active) {
     return { ok: false, reason: 'SERVICE_NOT_FOUND' };
   }
 

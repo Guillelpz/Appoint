@@ -243,6 +243,24 @@ describe('getAvailableSlots — huecos base', () => {
     expect(slotsServicioAjeno).toEqual([]);
   });
 
+  it('devuelve una lista vacía si el servicio está desactivado', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const now = new Date('2026-07-13T08:00:00.000Z');
+
+    await prisma.service.update({ where: { id: seed.services.corteHombre.id }, data: { active: false } });
+
+    const slots = await getAvailableSlots(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      dateFrom: '2026-07-14',
+      dateTo: '2026-07-14',
+      now,
+    });
+
+    expect(slots).toEqual([]);
+  });
+
   it('devuelve una lista vacía si el employeeId explícito no presta ese servicio', async () => {
     const seed = await seedDemoBusiness(prisma);
     const now = new Date('2026-07-13T08:00:00.000Z');

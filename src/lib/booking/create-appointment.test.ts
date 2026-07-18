@@ -480,6 +480,29 @@ describe('createAppointment', () => {
     expect(appointmentCount).toBe(0);
   });
 
+  it('rechaza con SERVICE_NOT_FOUND si el servicio está desactivado', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.service.update({ where: { id: seed.services.corteHombre.id }, data: { active: false } });
+
+    const result = await createAppointment(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Servicio desactivado',
+      customerPhone: '+34666000104',
+      customerEmail: 'desactivado@example.com',
+      source: 'WEB',
+      ipAddress: '198.51.100.104',
+      now: NOW,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'SERVICE_NOT_FOUND' });
+
+    const appointmentCount = await prisma.appointment.count({ where: { businessId: seed.business.id } });
+    expect(appointmentCount).toBe(0);
+  });
+
   it('rechaza con EMPLOYEE_UNAVAILABLE si el empleado indicado no presta ese servicio', async () => {
     const seed = await seedDemoBusiness(prisma);
     // 16:00 local (dentro del horario de tarde de Carlos), para que el hueco
