@@ -23,6 +23,31 @@ function isValidBlock(block: WorkingHoursBlockInput): boolean {
   );
 }
 
+// Comprueba que, dentro de cada día de la semana, los tramos no se solapen.
+// Dos tramos contiguos (fin de uno = inicio del siguiente) sí están permitidos.
+function hasOverlappingBlocks(blocks: WorkingHoursBlockInput[]): boolean {
+  const byWeekday = new Map<number, WorkingHoursBlockInput[]>();
+  for (const block of blocks) {
+    const existing = byWeekday.get(block.weekday);
+    if (existing) {
+      existing.push(block);
+    } else {
+      byWeekday.set(block.weekday, [block]);
+    }
+  }
+
+  for (const dayBlocks of byWeekday.values()) {
+    const sorted = [...dayBlocks].sort((a, b) => a.startMinute - b.startMinute);
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].startMinute < sorted[i - 1].endMinute) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export async function replaceWeeklyWorkingHours(
   prisma: PrismaClient,
   businessId: string,
@@ -30,6 +55,13 @@ export async function replaceWeeklyWorkingHours(
   blocks: WorkingHoursBlockInput[]
 ): Promise<ReplaceWorkingHoursResult> {
   if (!blocks.every(isValidBlock)) {
+    return { ok: false, reason: 'INVALID_INPUT' };
+  }
+
+  // No se permiten franjas solapadas dentro del mismo día: el motor de
+  // cálculo de huecos las consume tal cual y produciría slots duplicados
+  // o inconsistentes.
+  if (hasOverlappingBlocks(blocks)) {
     return { ok: false, reason: 'INVALID_INPUT' };
   }
 

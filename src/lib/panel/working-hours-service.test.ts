@@ -49,4 +49,46 @@ describe('replaceWeeklyWorkingHours', () => {
     const stored = await prisma.workingHours.findMany({ where: { employeeId: seed.employees.marta.id } });
     expect(stored).toHaveLength(0);
   });
+
+  it('devuelve INVALID_INPUT si dos tramos del mismo día se solapan, y no persiste nada', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await replaceWeeklyWorkingHours(prisma, seed.business.id, seed.employees.marta.id, [
+      { weekday: 1, startMinute: 540, endMinute: 700 },
+      { weekday: 1, startMinute: 600, endMinute: 780 },
+    ]);
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+    const stored = await prisma.workingHours.findMany({ where: { employeeId: seed.employees.marta.id } });
+    // El horario existente del seed (10 tramos) no debe verse afectado.
+    expect(stored).toHaveLength(10);
+  });
+
+  it('permite tramos con el mismo rango en días distintos (no hay solape entre días)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await replaceWeeklyWorkingHours(prisma, seed.business.id, seed.employees.marta.id, [
+      { weekday: 1, startMinute: 540, endMinute: 700 },
+      { weekday: 2, startMinute: 540, endMinute: 700 },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.workingHours).toHaveLength(2);
+    }
+  });
+
+  it('permite tramos contiguos en el mismo día (fin = inicio siguiente)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await replaceWeeklyWorkingHours(prisma, seed.business.id, seed.employees.marta.id, [
+      { weekday: 1, startMinute: 540, endMinute: 600 },
+      { weekday: 1, startMinute: 600, endMinute: 660 },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.workingHours).toHaveLength(2);
+    }
+  });
 });
