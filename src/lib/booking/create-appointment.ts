@@ -218,9 +218,9 @@ export async function createAppointment(
 // ante variaciones del motor. Cualquier otro P2002 (p. ej. colisión
 // astronómicamente improbable de confirmToken/cancelToken) devuelve null y
 // el llamador relanza el error: no debe enmascararse como fallo de negocio.
-function classifyUniqueViolation(
+export function classifyUniqueViolation(
   error: Prisma.PrismaClientKnownRequestError
-): Extract<CreateAppointmentFailureReason, 'SLOT_TAKEN' | 'CUSTOMER_CONFLICT'> | null {
+): 'SLOT_TAKEN' | 'CUSTOMER_CONFLICT' | null {
   const meta = error.meta as { modelName?: unknown; target?: unknown } | undefined;
   const rawTarget = meta?.target;
   const targets = Array.isArray(rawTarget)

@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient, type Appointment, type Customer } from '@prisma/client';
-import { isEmployeeAvailableAt } from '@/lib/booking/create-appointment';
+import { isEmployeeAvailableAt, classifyUniqueViolation } from '@/lib/booking/create-appointment';
 import { releaseExpiredPendingSlot } from '@/lib/booking/active-appointments';
 import { validateManualAppointmentInput } from '@/lib/public/validate-booking-input';
 import { getEmailSender } from '@/lib/email/get-email-sender';
@@ -22,7 +22,8 @@ export type CreateManualAppointmentFailureReason =
   | 'INVALID_INPUT'
   | 'SERVICE_NOT_FOUND'
   | 'EMPLOYEE_UNAVAILABLE'
-  | 'SLOT_TAKEN';
+  | 'SLOT_TAKEN'
+  | 'CUSTOMER_CONFLICT';
 
 export type CreateManualAppointmentResult =
   | { ok: true; appointment: Appointment }
@@ -68,22 +69,6 @@ async function resolveOrCreateManualCustomer(
   return tx.customer.create({
     data: { businessId: params.businessId, name: params.name, phone: null, email: null },
   });
-}
-
-// Detecta si un P2002 proviene del índice único parcial (employeeId, start)
-// de citas activas (ver el comentario homólogo classifyUniqueViolation en
-// create-appointment.ts). Se duplica aquí de forma mínima —solo el caso
-// SLOT_TAKEN— porque este servicio no reutiliza createAppointment (omite a
-// propósito el resto de comprobaciones anti-fraude que esa función siempre
-// ejecuta).
-function isSlotUniqueViolation(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
-    return false;
-  }
-  const meta = error.meta as { target?: unknown } | undefined;
-  const rawTarget = meta?.target;
-  const targets = Array.isArray(rawTarget) ? rawTarget.map(String) : typeof rawTarget === 'string' ? [rawTarget] : [];
-  return (targets.includes('employeeId') && targets.includes('start')) || targets.some((t) => t.includes('employeeId_start'));
 }
 
 export async function createManualAppointmentForBusiness(
@@ -159,8 +144,17 @@ export async function createManualAppointmentForBusiness(
       });
     });
   } catch (error) {
-    if (isSlotUniqueViolation(error)) {
-      return { ok: false, reason: 'SLOT_TAKEN' };
+    // Reutiliza classifyUniqueViolation de create-appointment.ts: distingue
+    // el índice único parcial (employeeId, start) de citas activas
+    // (SLOT_TAKEN) de los índices únicos de Customer businessId_phone /
+    // businessId_email (CUSTOMER_CONFLICT — el teléfono o email indicado ya
+    // pertenece a otro cliente del negocio con datos distintos). Cualquier
+    // otro P2002 se relanza sin enmascarar.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const reason = classifyUniqueViolation(error);
+      if (reason) {
+        return { ok: false, reason };
+      }
     }
     throw error;
   }

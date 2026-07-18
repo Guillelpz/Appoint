@@ -117,6 +117,76 @@ describe('createManualAppointmentForBusiness', () => {
     expect(customers).toHaveLength(1);
   });
 
+  it('reutiliza el Customer existente por teléfono cuando no hay email (contacto solo teléfono)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const phone = '+34666000210';
+
+    const first = await createManualAppointmentForBusiness(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente por teléfono',
+      customerPhone: phone,
+      now: NOW,
+      emailSender: new FakeEmailSender(),
+    });
+    expect(first.ok).toBe(true);
+
+    const second = await createManualAppointmentForBusiness(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: new Date(VALID_START.getTime() + 60 * 60 * 1000),
+      customerName: 'Cliente por teléfono',
+      customerPhone: phone,
+      now: NOW,
+      emailSender: new FakeEmailSender(),
+    });
+
+    expect(second.ok).toBe(true);
+    const customers = await prisma.customer.findMany({ where: { businessId: seed.business.id, phone } });
+    expect(customers).toHaveLength(1);
+  });
+
+  it('devuelve CUSTOMER_CONFLICT si el teléfono ya pertenece a otro cliente del negocio con otro email (sin falso 500)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    // Cliente existente con teléfono X y email A.
+    await prisma.customer.create({
+      data: {
+        businessId: seed.business.id,
+        name: 'Cliente original manual',
+        phone: '+34666000200',
+        email: 'original-manual@example.com',
+      },
+    });
+
+    // Alta manual con el mismo teléfono X pero un email B distinto: el
+    // upsert por businessId_email no encuentra al cliente (email nuevo) y su
+    // create viola la restricción única Customer businessId_phone. Debe
+    // clasificarse como CUSTOMER_CONFLICT (no relanzar el error crudo) y no
+    // debe crear ni cita ni email.
+    const emailSender = new FakeEmailSender();
+    const result = await createManualAppointmentForBusiness(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente conflicto manual',
+      customerPhone: '+34666000200',
+      customerEmail: 'otro-email-manual@example.com',
+      now: NOW,
+      emailSender,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'CUSTOMER_CONFLICT' });
+
+    const appointmentCount = await prisma.appointment.count({ where: { businessId: seed.business.id } });
+    expect(appointmentCount).toBe(0);
+    expect(emailSender.sent).toHaveLength(0);
+  });
+
   it('devuelve INVALID_INPUT si el nombre está vacío', async () => {
     const seed = await seedDemoBusiness(prisma);
 
@@ -147,6 +217,64 @@ describe('createManualAppointmentForBusiness', () => {
     });
 
     expect(result).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
+  });
+
+  it('rechaza si el serviceId pertenece a otro negocio (multi-tenancy)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const otherBusiness = await prisma.business.create({
+      data: { slug: 'otro-negocio-manual-servicio', name: 'Otro Negocio Manual', type: 'OTHER' },
+    });
+    const otherService = await prisma.service.create({
+      data: { businessId: otherBusiness.id, name: 'Servicio ajeno manual', durationMinutes: 30, priceCents: 1000 },
+    });
+
+    const result = await createManualAppointmentForBusiness(prisma, {
+      businessId: seed.business.id,
+      serviceId: otherService.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Servicio ajeno',
+      now: NOW,
+      emailSender: new FakeEmailSender(),
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'SERVICE_NOT_FOUND' });
+
+    const appointmentCount = await prisma.appointment.count({ where: { businessId: seed.business.id } });
+    expect(appointmentCount).toBe(0);
+  });
+
+  it('rechaza si el employeeId pertenece a otro negocio, aunque esté vinculado al mismo servicio (multi-tenancy)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const otherBusiness = await prisma.business.create({
+      data: { slug: 'otro-negocio-manual-empleado', name: 'Otro Negocio Manual Empleado', type: 'OTHER' },
+    });
+    const otherEmployee = await prisma.employee.create({
+      data: { businessId: otherBusiness.id, name: 'Empleado ajeno', color: '#000000', active: true },
+    });
+    // Vincula (saltándose el alta normal) al empleado ajeno con el servicio
+    // del negocio demo, para forzar que el código llegue realmente a
+    // comprobar employee.businessId !== businessId (regla dura de
+    // multi-tenancy) y no se quede antes en un simple "no presta el
+    // servicio" (ServiceEmployee inexistente).
+    await prisma.serviceEmployee.create({
+      data: { serviceId: seed.services.corteHombre.id, employeeId: otherEmployee.id },
+    });
+
+    const result = await createManualAppointmentForBusiness(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: otherEmployee.id,
+      start: VALID_START,
+      customerName: 'Empleado ajeno',
+      now: NOW,
+      emailSender: new FakeEmailSender(),
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
+
+    const appointmentCount = await prisma.appointment.count({ where: { businessId: seed.business.id } });
+    expect(appointmentCount).toBe(0);
   });
 
   it('devuelve EMPLOYEE_UNAVAILABLE si el hueco cae fuera del horario laboral', async () => {
