@@ -86,6 +86,38 @@ describe('addCustomerToBlacklist / removeCustomerFromBlacklist', () => {
 
     expect(result).toEqual({ ok: false, reason: 'NO_CONTACT_INFO' });
   });
+
+  it('devuelve NOT_FOUND y no crea ninguna entrada si el cliente pertenece a otro negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const otherBusiness = await prisma.business.create({ data: { slug: 'otro-negocio-blacklist-add', name: 'Otro', type: 'OTHER' } });
+    const customer = await prisma.customer.create({
+      data: { businessId: seed.business.id, name: 'Cliente ajeno', phone: '+34600999888', email: 'ajeno-add@example.com' },
+    });
+
+    const before = await prisma.blacklistEntry.count();
+    const result = await addCustomerToBlacklist(prisma, otherBusiness.id, customer.id, 'motivo');
+    const after = await prisma.blacklistEntry.count();
+
+    expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
+    expect(after).toBe(before);
+  });
+
+  it('devuelve NOT_FOUND y no borra entradas de otro negocio si el cliente pertenece a otro negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const otherBusiness = await prisma.business.create({ data: { slug: 'otro-negocio-blacklist-remove', name: 'Otro', type: 'OTHER' } });
+    const customer = await prisma.customer.create({
+      data: { businessId: seed.business.id, name: 'Cliente ajeno', phone: '+34600999777', email: 'ajeno-remove@example.com' },
+    });
+    const entry = await prisma.blacklistEntry.create({
+      data: { businessId: seed.business.id, phone: customer.phone, email: customer.email, reason: 'motivo' },
+    });
+
+    const result = await removeCustomerFromBlacklist(prisma, otherBusiness.id, customer.id);
+
+    expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
+    const stillThere = await prisma.blacklistEntry.findUnique({ where: { id: entry.id } });
+    expect(stillThere).not.toBeNull();
+  });
 });
 
 describe('getCustomerDetail', () => {

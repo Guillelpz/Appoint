@@ -96,10 +96,16 @@ export async function addCustomerToBlacklist(
   return { ok: true, entry };
 }
 
-export async function removeCustomerFromBlacklist(prisma: PrismaClient, businessId: string, customerId: string): Promise<{ ok: true }> {
+export type RemoveFromBlacklistResult = { ok: true } | { ok: false; reason: 'NOT_FOUND' };
+
+export async function removeCustomerFromBlacklist(
+  prisma: PrismaClient,
+  businessId: string,
+  customerId: string
+): Promise<RemoveFromBlacklistResult> {
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
   if (!customer || customer.businessId !== businessId) {
-    return { ok: true };
+    return { ok: false, reason: 'NOT_FOUND' };
   }
 
   const contactFilters = buildContactFilters(customer);
