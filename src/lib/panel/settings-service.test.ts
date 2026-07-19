@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { ThemePreset } from '@prisma/client';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
 import { getBusinessSettings, updateBusinessSettings, type BusinessSettingsInput } from './settings-service';
@@ -52,6 +53,37 @@ describe('updateBusinessSettings', () => {
     const seed = await seedDemoBusiness(prisma);
 
     const result = await updateBusinessSettings(prisma, seed.business.id, { ...VALID_INPUT, slotGranularityMinutes: 7 });
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+  });
+
+  it('devuelve INVALID_INPUT si themePreset no es un valor válido del enum', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await updateBusinessSettings(prisma, seed.business.id, {
+      ...VALID_INPUT,
+      themePreset: 'NEON' as ThemePreset,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+    const business = await getBusinessSettings(prisma, seed.business.id);
+    expect(business?.themePreset).not.toBe('NEON');
+  });
+
+  it('devuelve INVALID_INPUT si maxBookingWindowDays está fuera de rango', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const resultZero = await updateBusinessSettings(prisma, seed.business.id, { ...VALID_INPUT, maxBookingWindowDays: 0 });
+    const resultTooHigh = await updateBusinessSettings(prisma, seed.business.id, { ...VALID_INPUT, maxBookingWindowDays: 400 });
+
+    expect(resultZero).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+    expect(resultTooHigh).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+  });
+
+  it('devuelve INVALID_INPUT si minAdvanceNoticeMinutes es negativo', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await updateBusinessSettings(prisma, seed.business.id, { ...VALID_INPUT, minAdvanceNoticeMinutes: -1 });
 
     expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
   });

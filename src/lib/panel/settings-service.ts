@@ -1,4 +1,5 @@
-import type { Business, PrismaClient, ThemePreset } from '@prisma/client';
+import { ThemePreset } from '@prisma/client';
+import type { Business, PrismaClient } from '@prisma/client';
 
 export interface BusinessSettingsInput {
   name: string;
@@ -18,6 +19,7 @@ export type UpdateBusinessSettingsResult = { ok: true; business: Business } | { 
 
 const HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 const VALID_GRANULARITIES = [5, 10, 15, 20, 30, 60];
+const VALID_THEME_PRESETS = Object.values(ThemePreset);
 
 export async function getBusinessSettings(prisma: PrismaClient, businessId: string): Promise<Business | null> {
   return prisma.business.findUnique({ where: { id: businessId } });
@@ -30,6 +32,9 @@ export async function updateBusinessSettings(
 ): Promise<UpdateBusinessSettingsResult> {
   const name = input.name.trim();
   if (name.length === 0 || name.length > 120) {
+    return { ok: false, reason: 'INVALID_INPUT' };
+  }
+  if (!VALID_THEME_PRESETS.includes(input.themePreset)) {
     return { ok: false, reason: 'INVALID_INPUT' };
   }
   if (!HEX_COLOR_PATTERN.test(input.accentColor)) {
