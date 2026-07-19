@@ -1,0 +1,101 @@
+import { describe, it, expect } from 'vitest';
+import { prisma } from '../../test/prisma-client';
+import { seedDemoBusiness } from '../seed/demo-business';
+import { createAppointment } from '@/lib/booking/create-appointment';
+import {
+  listCustomersForBusiness,
+  getCustomerDetail,
+  addCustomerToBlacklist,
+  removeCustomerFromBlacklist,
+} from './customers-service';
+
+const NOW = new Date('2026-07-13T08:00:00.000Z');
+
+async function bookForCustomer(businessId: string, serviceId: string, employeeId: string, email: string, start: Date) {
+  const result = await createAppointment(prisma, {
+    businessId,
+    serviceId,
+    employeeId,
+    start,
+    customerName: 'Cliente listado',
+    customerPhone: '+34688000090',
+    customerEmail: email,
+    source: 'WEB',
+    ipAddress: '198.51.100.95',
+    now: NOW,
+  });
+  if (!result.ok) throw new Error(`setup falló: ${result.reason}`);
+  return result.appointment;
+}
+
+describe('listCustomersForBusiness', () => {
+  it('incluye el número de citas, la última cita y si está en la lista negra', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await bookForCustomer(seed.business.id, seed.services.corteHombre.id, seed.employees.marta.id, 'listado@example.com', new Date('2026-07-14T08:00:00.000Z'));
+
+    const customers = await listCustomersForBusiness(prisma, seed.business.id);
+    const target = customers.find((c) => c.email === 'listado@example.com');
+
+    expect(target?.appointmentCount).toBe(1);
+    expect(target?.lastAppointmentStart).toEqual(new Date('2026-07-14T08:00:00.000Z'));
+    expect(target?.blacklisted).toBe(false);
+  });
+});
+
+describe('addCustomerToBlacklist / removeCustomerFromBlacklist', () => {
+  it('bloquea y desbloquea a un cliente por su email', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const appointment = await bookForCustomer(seed.business.id, seed.services.corteHombre.id, seed.employees.marta.id, 'bloqueo@example.com', new Date('2026-07-14T09:00:00.000Z'));
+
+    const added = await addCustomerToBlacklist(prisma, seed.business.id, appointment.customerId, 'Motivo de prueba');
+    expect(added.ok).toBe(true);
+
+    const detail = await getCustomerDetail(prisma, seed.business.id, appointment.customerId);
+    expect(detail?.blacklisted).toBe(true);
+
+    await removeCustomerFromBlacklist(prisma, seed.business.id, appointment.customerId);
+    const detailAfter = await getCustomerDetail(prisma, seed.business.id, appointment.customerId);
+    expect(detailAfter?.blacklisted).toBe(false);
+  });
+
+  it('no bloquea/desbloquea entradas de la lista negra de otros clientes con contacto NULL', async () => {
+    // Regresión: si el filtro de blacklist usara {phone: null} sin excluir
+    // los NULL explícitamente, borraría entradas de OTROS clientes sin
+    // teléfono por error.
+    const seed = await seedDemoBusiness(prisma);
+    const customerSinTelefono = await prisma.customer.create({
+      data: { businessId: seed.business.id, name: 'Cliente sin teléfono', phone: null, email: 'sin-telefono@example.com' },
+    });
+    const otraEntradaBlacklist = await prisma.blacklistEntry.create({
+      data: { businessId: seed.business.id, phone: null, email: 'otro-bloqueado@example.com', reason: 'otro cliente' },
+    });
+
+    await removeCustomerFromBlacklist(prisma, seed.business.id, customerSinTelefono.id);
+
+    const stillThere = await prisma.blacklistEntry.findUnique({ where: { id: otraEntradaBlacklist.id } });
+    expect(stillThere).not.toBeNull();
+  });
+
+  it('devuelve NO_CONTACT_INFO si el cliente no tiene teléfono ni email', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const customer = await prisma.customer.create({
+      data: { businessId: seed.business.id, name: 'Cliente sin contacto', phone: null, email: null },
+    });
+
+    const result = await addCustomerToBlacklist(prisma, seed.business.id, customer.id, null);
+
+    expect(result).toEqual({ ok: false, reason: 'NO_CONTACT_INFO' });
+  });
+});
+
+describe('getCustomerDetail', () => {
+  it('devuelve null si el cliente pertenece a otro negocio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const otherBusiness = await prisma.business.create({ data: { slug: 'otro-negocio-cliente', name: 'Otro', type: 'OTHER' } });
+    const customer = await prisma.customer.create({ data: { businessId: seed.business.id, name: 'X', phone: '+34600000000', email: 'x@example.com' } });
+
+    const detail = await getCustomerDetail(prisma, otherBusiness.id, customer.id);
+
+    expect(detail).toBeNull();
+  });
+});
