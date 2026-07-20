@@ -5,11 +5,35 @@ import { getLocalDateString } from '../src/lib/booking/timezone';
 
 const prisma = new PrismaClient({ datasources: { db: { url: process.env.TEST_DATABASE_URL } } });
 
+// El negocio demo (`salon-aura`) y sus datos se comparten con el resto de
+// specs e2e (p. ej. booking-flow.spec.ts, que asume `manualApproval: false`
+// por defecto). Este afterAll revierte el flag y borra la cita/cliente de
+// fixture que crea este test, para que el resultado no dependa del orden de
+// ejecución de los ficheros de spec (Playwright los corre alfabéticamente,
+// pero eso no es una garantía en la que apoyarse).
+let businessId: string | undefined;
+let originalManualApproval = false;
+let appointmentId: string | undefined;
+let customerId: string | undefined;
+
 test.afterAll(async () => {
+  if (appointmentId) {
+    await prisma.appointment.deleteMany({ where: { id: appointmentId } });
+  }
+  if (customerId) {
+    await prisma.customer.deleteMany({ where: { id: customerId } });
+  }
+  if (businessId) {
+    await prisma.business.update({ where: { id: businessId }, data: { manualApproval: originalManualApproval } });
+  }
   await prisma.$disconnect();
 });
 
 test('login del panel y aprobación manual de una cita pendiente', async ({ page }) => {
+  const businessBefore = await prisma.business.findUniqueOrThrow({ where: { slug: 'salon-aura' } });
+  businessId = businessBefore.id;
+  originalManualApproval = businessBefore.manualApproval;
+
   const business = await prisma.business.update({
     where: { slug: 'salon-aura' },
     data: { manualApproval: true },
@@ -20,6 +44,7 @@ test('login del panel y aprobación manual de una cita pendiente', async ({ page
   const customer = await prisma.customer.create({
     data: { businessId: business.id, name: 'Cliente Pendiente E2E', phone: '+34600777888', email: uniqueEmail },
   });
+  customerId = customer.id;
   const start = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
   const appointment = await prisma.appointment.create({
     data: {
@@ -36,6 +61,7 @@ test('login del panel y aprobación manual de una cita pendiente', async ({ page
       emailVerifiedAt: new Date(),
     },
   });
+  appointmentId = appointment.id;
 
   const { email, password } = getDemoOwnerCredentials();
 
