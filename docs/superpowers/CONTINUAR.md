@@ -54,6 +54,9 @@ Estos patrones fueron establecidos en Fase 5 y se reutilizan en Fase 6:
 - **Sin paginación en `/panel/clientes`**: razonable para volumen local, pero si el usuario anticipa cientos de clientes, revisar esta decisión.
 - **Editores de horario y servicios sin claim atómico**: si dos pestañas del panel editan lo mismo, la última en guardar gana (mismo patrón que resto de CRUD). Riesgo bajo (dueño solo, uso secuencial).
 - **Ventana de recordatorio / edge cases de `manualApproval`**: casos límite entre cambio de estado y re-click del cliente documentados pero no exhaustivamente cubiertos en tests.
+- El slug `panel` está reservado de facto por la ruta del panel — el alta de negocios (Fase 6) no debe permitir ese slug.
+- Una cita aprobada con menos de 23h de antelación no recibe recordatorio 24h (propiedad de diseño del cron, aceptada).
+- Las ausencias (`TimeOff`) no tienen límites de fecha razonables en el formulario — sin precedente en el resto del formulario, documentado como conocido.
 
 ## Avisos del motor que siguen vigentes
 
