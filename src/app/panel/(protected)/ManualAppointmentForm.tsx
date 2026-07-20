@@ -51,13 +51,20 @@ export function ManualAppointmentForm({ services, employees, defaultDate }: Manu
         customerEmail,
       });
       if (result.ok) {
+        // No cierra el formulario (a diferencia de un fallo de validación,
+        // no hay nada que "descartar"): si se hiciera `setOpen(false)` aquí,
+        // el componente entero volvería a la vista colapsada (el `if
+        // (!open) return <button>...` de más abajo) en el mismo render, y el
+        // mensaje de éxito de esta misma línea nunca llegaría a mostrarse
+        // (código inalcanzable en la práctica). Mantenerlo abierto también
+        // permite dar de alta varias citas manuales seguidas sin tener que
+        // volver a pulsar "+ Cita manual" cada vez.
         setMessage('Cita creada correctamente.');
         setCustomerName('');
         setCustomerPhone('');
         setCustomerEmail('');
         setSelectedStart(null);
         setSlots([]);
-        setOpen(false);
       } else {
         setMessage(result.message ?? 'No se pudo crear la cita.');
       }
