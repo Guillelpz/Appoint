@@ -141,6 +141,45 @@ describe('getAgendaForBusiness', () => {
     expect(agenda.appointments).toHaveLength(0);
   });
 
+  it('incluye a un empleado desactivado que tiene una cita dentro del rango, marcándolo como inactivo', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const appt = await createAppointmentDirect({
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: new Date('2026-07-14T09:00:00.000Z'),
+      status: 'CONFIRMED',
+    });
+    await prisma.employee.update({ where: { id: seed.employees.marta.id }, data: { active: false } });
+
+    const agenda = await getAgendaForBusiness(prisma, {
+      businessId: seed.business.id,
+      dateFromUtc: new Date('2026-07-14T00:00:00.000Z'),
+      dateToUtc: new Date('2026-07-15T00:00:00.000Z'),
+    });
+
+    const martaAgenda = agenda.employees.find((e) => e.id === seed.employees.marta.id);
+    expect(martaAgenda).toBeDefined();
+    expect(martaAgenda?.active).toBe(false);
+    expect(agenda.appointments.map((a) => a.id)).toContain(appt.id);
+
+    const carlosAgenda = agenda.employees.find((e) => e.id === seed.employees.carlos.id);
+    expect(carlosAgenda?.active).toBe(true);
+  });
+
+  it('excluye a un empleado desactivado sin ninguna cita dentro del rango consultado', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.employee.update({ where: { id: seed.employees.marta.id }, data: { active: false } });
+
+    const agenda = await getAgendaForBusiness(prisma, {
+      businessId: seed.business.id,
+      dateFromUtc: new Date('2026-07-14T00:00:00.000Z'),
+      dateToUtc: new Date('2026-07-15T00:00:00.000Z'),
+    });
+
+    expect(agenda.employees.some((e) => e.id === seed.employees.marta.id)).toBe(false);
+  });
+
   it('respeta los límites del día local: incluye 00:00 y 23:45, excluye el día siguiente', async () => {
     const seed = await seedDemoBusiness(prisma);
     const localDay = '2026-07-14';

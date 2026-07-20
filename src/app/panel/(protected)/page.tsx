@@ -179,6 +179,7 @@ export default async function PanelAgendaPage({
               <h2 className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
                 <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: employee.color }} />
                 {employee.name}
+                {!employee.active && <span className="text-xs font-normal text-slate-400">(inactivo)</span>}
               </h2>
               {employeeAppointments.length === 0 && <p className="text-sm text-slate-400">Sin citas.</p>}
               {isWeek ? (
