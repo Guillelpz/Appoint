@@ -25,10 +25,10 @@ Este documento será la fuente de verdad de estado si el ledger `.superpowers/sd
 
 Estos patrones fueron establecidos en Fase 5 y se reutilizan en Fase 6:
 
-- **Contrato de `requirePanelSession()`** (`src/lib/panel/require-session.ts`): devuelve `{ userId, email, businessId }` resuelto server-side desde la sesión autenticada. La defensa en profundidad rechaza requests sin sesión válida. Para extender a `SUPERADMIN`, se podría usar el mismo patrón con `getOwnerBusinessIdForUser` adaptado para resolver el rol.
-- **Patrón de inyección de `EmailSender`** (`src/lib/email/sender.ts`): `emailSender?: EmailSender`, por defecto `getEmailSender()`, permite testar con Postgres real sin tocar red. Se reutiliza en todas las operaciones que envían email del panel (aprobación, rechazo, cancelación, cita manual).
+- **Contrato de `requirePanelSession()`** (`src/lib/panel/session.ts`): devuelve `{ userId, email, businessId }` resuelto server-side desde la sesión autenticada. La defensa en profundidad rechaza requests sin sesión válida. Para extender a `SUPERADMIN`, se podría usar el mismo patrón con `getOwnerBusinessIdForUser` adaptado para resolver el rol.
+- **Patrón de inyección de `EmailSender`** (`src/lib/email/get-email-sender.ts`, tipos en `src/lib/email/types.ts`): `emailSender?: EmailSender`, por defecto `getEmailSender()`, permite testar con Postgres real sin tocar red. Se reutiliza en todas las operaciones que envían email del panel (aprobación, rechazo, cancelación, cita manual).
 - **`AppointmentEmailContext`** (`src/lib/email/appointment-notifications.tsx`): shape estable usado por todas las funciones `sendXEmail` — reutilizable para nuevas plantillas.
-- **Seedeo de usuario demo** (`src/lib/db/seed.ts`): `ensureDemoOwnerAuthUser` + `seedDemoOwnerMembership` como plantilla para el alta de negocios reales y su invitación de dueño (Fase 6).
+- **Seedeo de usuario demo** (`src/lib/seed/demo-owner.ts`, `src/lib/seed/demo-business.ts`, invocado desde `prisma/seed.ts`): `ensureDemoOwnerAuthUser` + `seedDemoOwnerMembership` como plantilla para el alta de negocios reales y su invitación de dueño (Fase 6).
 - Rol `STAFF` declarado en el enum `MembershipRole` pero sin UI ni lógica de autorización — candidato para Fase 6 o posterior.
 
 ## Avisos técnicos para la Fase 6
