@@ -1,56 +1,77 @@
 # Continuación del proyecto — estado y siguientes pasos
 
-_Actualizado: 2026-07-17 tras completar la Fase 4 (emails y recordatorios): revisión global aprobada (opus, "Ready to merge") y rama `fase-4-emails` mergeada a `main` (`c5ddcde`) y pusheada a origin._
+_Actualizado: 2026-07-20 tras completar la Fase 5 (panel del negocio): 317/317 tests + lint + tsc + build + 2/2 Playwright en verde, rama `fase-5-panel` lista para revisión global (opus) antes del merge a `main`._
 
 ## Estado actual
 
-- **Hecho**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`), Fase 3 (página pública, mergeada 2026-07-16) y **Fase 4 (emails y recordatorios)**: capa de envío intercambiable (`ResendEmailSender`/`ConsoleEmailSender` según `RESEND_API_KEY`), plantillas React Email (confirmación, solicitud pendiente de aprobación, nueva solicitud al negocio, cancelación al cliente y al negocio, recordatorio 24h), doble paso de `manualApproval` (`Appointment.emailVerifiedAt`: confirmar por token ya no equivale a aprobar la cita cuando `manualApproval` está activo), expiración perezosa corregida (una `PENDING` con `emailVerifiedAt` fijado ya no caduca ni se libera automáticamente), `/confirmar/{token}` ya no auto-confirma en `GET` (botón + Server Action), y cron horario `/api/cron/reminders` protegido por `CRON_SECRET`.
-- **Verificación**: 207/207 tests Vitest contra Postgres real + 1 e2e Playwright (actualizado para pulsar el botón de confirmar) + lint + build, todo en verde; re-verificado sobre `main` tras el merge (2026-07-17).
-- **Proceso usado**: superpowers — writing-plans → subagent-driven-development (ledger en `.superpowers/sdd/progress.md`, gitignorado; si no existe, este documento es la fuente de verdad). Cada tarea pasó revisión por subagente; los hallazgos Important se corrigieron en el momento (idempotencias atómicas en cancelación y recordatorios, estado actual en la idempotencia de `confirmAppointment`, normalización de `APP_BASE_URL`).
-- **Política de modelos** (petición del usuario): haiku para tareas con código completo en el plan (transcripción), sonnet para integración/entorno y para TODOS los revisores por tarea, opus para la revisión global de rama. El modelo principal solo orquesta.
+- **Hecho**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`), Fase 3 (página pública, mergeada 2026-07-16), Fase 4 (emails y recordatorios, mergeada a `main` 2026-07-17) y **Fase 5 (panel del negocio)**.
+- **Fase 5 construido**: autenticación Supabase Auth (email+contraseña) con middleware de protección en `src/middleware.ts` + defensa en profundidad (`requirePanelSession()`); acceso actual restringido a **rol OWNER solo** (STAFF fuera de alcance); agenda `/panel` con vistas día/semana simplificadas (sin agrupar por franjas horarias), con acciones de aprobar/rechazar pendientes (con envío de emails), completar/no-show, cancelar y crear cita manual (nombre obligatorio, contacto opcional, nace `CONFIRMED`, respeta horario sin anti-fraude); CRUD de `/panel/servicios` (con `active` soft-toggle) y `/panel/equipo` (servicios por empleado, horarios semanales con múltiples tramos, ausencias); `/panel/clientes` (historial de citas + lista negra con block/unblock verificado end-to-end); `/panel/ajustes` (datos del negocio, tema con vista previa en vivo usando `getThemeCssVariables`, políticas de reserva, descarga QR de URL pública); emails nuevos (aprobación, rechazo, cancelación desde negocio) con tolerancia a contacto faltante (citas manuales sin email/teléfono cliente).
+- **Verificación**: 317/317 tests Vitest contra Postgres real + lint + tsc + build completo + 2/2 e2e Playwright (`booking-flow.spec.ts`, `panel-approval.spec.ts` con walkthroughs del flujo de aprobación) — todo verde; re-verificado en tarea final con escenarios reales del navegador.
+- **Disciplina multi-tenancy**: cada servicio del panel toma `businessId` explícito resuelto server-side desde la sesión (nunca de entrada cliente); operaciones state-changing usan `updateMany` atómico (businessId + estado origen en `where`) para evitar carreras cross-tenant; hallazgos de revisión de tareas atraparon y corrigieron brechas reales antes del merge (validación de `ServiceEmployee` contra businessId del llamante, retorno NOT_FOUND en blacklist cross-tenant).
+- **Proceso usado**: superpowers — writing-plans → subagent-driven-development (ledger en `.superpowers/sdd/progress.md`, gitignorado; si no existe, este documento es la fuente de verdad). Cada tarea pasó revisión por subagente; hallazgos se corrigieron en el momento.
+- **Política de modelos** (petición del usuario): haiku para tareas mecánicas, sonnet para implementación estándar, opus para revisión global (pendiente). El modelo principal solo orquesta.
 
-## Siguiente paso: Fase 5 — Panel del negocio
+## Siguiente paso: Fase 6 — Super-admin + despliegue
 
 Alcance según la spec (`docs/superpowers/specs/2026-07-12-appoint-design.md`):
 
-1. Requiere configurar Supabase Auth (email+contraseña) para dueños/staff — todavía no está configurado.
-2. Contenido esperado: `/panel` (agenda día/semana, confirmar pendientes, marcar completada/no-show, crear cita manual, cancelar), `/panel/servicios`, `/panel/equipo` (CRUD + horarios + ausencias), `/panel/clientes` (listado + lista negra), `/panel/ajustes` (datos del negocio, tema con vista previa en vivo, políticas de reserva, descarga del QR).
-3. **Aprobación manual de citas** (pendiente desde la Fase 4): las citas `PENDING` con `emailVerifiedAt` fijado y `business.manualApproval = true` necesitan una acción del negocio en `/panel` para pasar a `CONFIRMED` (o a `CANCELLED` si se rechazan). Esa transición debe enviar también el email de confirmación al cliente (reutilizar `sendBookingConfirmationEmail` de `src/lib/email/appointment-notifications.tsx`, o una plantilla de "cita aprobada" si el copy debe distinguirse — decisión a consultar con el usuario).
-4. **Plantilla "invitación de dueño"**: sigue fuera de alcance hasta la Fase 6 (super-admin), pero si la Fase 5 acaba necesitando invitar staff por email antes de eso, consultar con el usuario.
+1. **Super-admin panel** (`/admin`): alta de negocios, activación/suspensión, métricas básicas.
+2. **Plantilla de email "invitación de dueño"**: excluida de la Fase 4, necesaria para invitar dueños reales (o staff si se extiende el rol).
+3. **Despliegue real**: dominio, certificados, Vercel + Supabase en producción.
 
-## Avisos técnicos para la Fase 5
+Este documento será la fuente de verdad de estado si el ledger `.superpowers/sdd/progress.md` no está disponible.
 
-- **Contrato de `confirmAppointment`** (`src/lib/booking/tokens.ts`): devuelve `{ ok: true; appointment; pendingApproval: boolean } | { ok: false; reason }`. Con `manualApproval`, `pendingApproval: true` significa "el cliente ya verificó su email, pero la cita sigue PENDING esperando que el negocio la apruebe" — es exactamente el filtro que necesita la vista de "pendientes de aprobación" del panel: `Appointment.status === 'PENDING' && Appointment.emailVerifiedAt !== null && business.manualApproval`.
-- **`isPendingAppointmentExpired(appointment, now)`** (`src/lib/booking/tokens.ts`) es la única fuente de verdad sobre si una `PENDING` sin verificar ha caducado; reutilízala en vez de recalcular `createdAt + 30min` a mano.
-- **`EmailSender`/`getEmailSender()`/`FakeEmailSender`**: cualquier envío nuevo del panel (aprobar, rechazar, cita manual) debe seguir el mismo patrón de inyección opcional (`emailSender?: EmailSender`, por defecto `getEmailSender()`) para poder testearse con Postgres real sin tocar red.
-- **`AppointmentEmailContext`** (`src/lib/email/appointment-notifications.tsx`) es el shape estable que ya usan las 6 funciones `sendXEmail`; cualquier plantilla nueva del panel (aprobación, cita manual) debería reutilizarlo tal cual si los datos encajan.
-- En dev, sin `RESEND_API_KEY`, todos los emails se registran en consola (`ConsoleEmailSender`) — no hace falta Resend real para probar el panel manualmente.
+## Avisos técnicos para la Fase 5 (histórico)
+
+Estos patrones fueron establecidos en Fase 5 y se reutilizan en Fase 6:
+
+- **Contrato de `requirePanelSession()`** (`src/lib/panel/require-session.ts`): devuelve `{ userId, email, businessId }` resuelto server-side desde la sesión autenticada. La defensa en profundidad rechaza requests sin sesión válida. Para extender a `SUPERADMIN`, se podría usar el mismo patrón con `getOwnerBusinessIdForUser` adaptado para resolver el rol.
+- **Patrón de inyección de `EmailSender`** (`src/lib/email/sender.ts`): `emailSender?: EmailSender`, por defecto `getEmailSender()`, permite testar con Postgres real sin tocar red. Se reutiliza en todas las operaciones que envían email del panel (aprobación, rechazo, cancelación, cita manual).
+- **`AppointmentEmailContext`** (`src/lib/email/appointment-notifications.tsx`): shape estable usado por todas las funciones `sendXEmail` — reutilizable para nuevas plantillas.
+- **Seedeo de usuario demo** (`src/lib/db/seed.ts`): `ensureDemoOwnerAuthUser` + `seedDemoOwnerMembership` como plantilla para el alta de negocios reales y su invitación de dueño (Fase 6).
+- Rol `STAFF` declarado en el enum `MembershipRole` pero sin UI ni lógica de autorización — candidato para Fase 6 o posterior.
+
+## Avisos técnicos para la Fase 6
+
+- **Autenticación super-admin**: reutilizar `requirePanelSession()` con extensión de rol (resolver `SUPERADMIN` desde membership, similar a cómo se resuelve `OWNER`). La cadena de rutas `/admin/**` se protegería análogamente con middleware.
+- **Alta de negocio + invitación real**: `ensureDemoOwnerAuthUser` de la Fase 5 es el patrón base; para producción, el super-admin crearía negocios vía Supabase Auth Admin API y enviaría la plantilla de "invitación de dueño" (pendiente de diseño).
+- **Verificación de estado**: todas las validaciones de `businessId` en el `where` de operaciones state-changing (establecidas en Fase 5) previenen operaciones cross-tenant incluso si se extienden roles — patrón estable para mantener.
+- En dev sin `RESEND_API_KEY`, todos los emails (incluyendo la invitación) se registran en consola — suficiente para QA.
 
 ## Minors conocidos (no bloquean; candidatos a limpieza oportunista)
 
+### Fase 4 + anteriores
 - Alternativas de hueco solo se ofrecen con `SLOT_TAKEN`; los mensajes de `EMPLOYEE_UNAVAILABLE`/`NO_EMPLOYEE_AVAILABLE` invitan a "otro horario" sin ofrecerlas (`booking-service.ts`).
 - Al volver de un error en la hoja de reserva, se pierden nombre/teléfono/email tecleados (remonta `StepCustomerData`).
 - El selector de día renderiza `maxBookingWindowDays` botones (30 por defecto; pesado si un negocio configura ventanas grandes).
 - Pantalla neutra de "no encontrado" duplicada (candidato a extraer un `NeutralErrorScreen` compartido); descarga `.ics` vía data-URI sin verificar en iOS Safari; `img` en vez de `next/image` (sin `remotePatterns`).
 - **Deuda consciente del motor (no tocar sin necesidad)**: TOCTOU en límites anti-fraude fuera de la transacción; `checkRateLimit` acoplado al flujo insertar-antes-de-contar; los tests de carrera aceptan `EMPLOYEE_UNAVAILABLE` además de `SLOT_TAKEN` (pre-check fuera de la transacción).
-- **Diferido a propósito a la Fase 5** (revisión global de la rama `fase-4-emails`): test de NO_SHOW post-verificación y del caso en que `manualApproval` cambia entre la verificación de email y el re-click del cliente; cobertura e2e de la pantalla de doble paso de `/confirmar` (se ejercitará junto con el panel de aprobación); el copy "es mañana" del recordatorio es impreciso en los bordes del día (la ventana ahora es `[now+23h, now+25h)`); comparación no constant-time en `cron-auth` (aceptado: el secreto es de alta entropía).
+- El copy "es mañana" del recordatorio es impreciso en los bordes del día (la ventana ahora es `[now+23h, now+25h)`); comparación no constant-time en `cron-auth` (aceptado: el secreto es de alta entropía).
+
+### Fase 5
+- **Vista de semana simplificada**: misma columna por empleado, 7 días agregados en el mismo rango, sin agrupar por franjas horarias — funcional pero más simple que un calendario semanal clásico (iteración UI si es necesario).
+- **Sin adjunto `.ics` en email de "cita aprobada"**: solo enlace a `/cita/{token}`, que ya ofrece descarga `.ics` desde Fase 3 — decisión conservadora confirmada (no extender `EmailMessage` con adjuntos).
+- **Sin paginación en `/panel/clientes`**: razonable para volumen local, pero si el usuario anticipa cientos de clientes, revisar esta decisión.
+- **Editores de horario y servicios sin claim atómico**: si dos pestañas del panel editan lo mismo, la última en guardar gana (mismo patrón que resto de CRUD). Riesgo bajo (dueño solo, uso secuencial).
+- **Ventana de recordatorio / edge cases de `manualApproval`**: casos límite entre cambio de estado y re-click del cliente documentados pero no exhaustivamente cubiertos en tests.
 
 ## Avisos del motor que siguen vigentes
 
 - **Dedupe de huecos**: con "cualquier profesional" el motor devuelve un slot por empleado; la capa pública ya deduplica por `start` (`getDedupedAvailableSlotsForBusiness`).
-- **`manualApproval`**: ver "Avisos técnicos para la Fase 5" arriba — ya no es solo un flag de copy, cambia el comportamiento real de `confirmAppointment`.
+- **`manualApproval`**: cambio de comportamiento real en `confirmAppointment` (no solo copy) — con `manualApproval = true`, la cita pasa a `PENDING` esperando aprobación del negocio en `/panel`, con envío de email de aprobación cuando se confirma.
 
 ## Después de la Fase 5
 
-- **Fase 6**: super-admin + despliegue (falta comprar dominio; usuario familiarizado con Vercel/Supabase). Incluye la plantilla de email "invitación de dueño", excluida de la Fase 4.
+- **Fase 6**: super-admin + despliegue — incluye plantilla de email "invitación de dueño" (excluida de Fase 4), dominio real, certificados y Supabase en producción.
 
 ## Cómo arrancar el entorno
 
 ```powershell
 pnpm exec supabase start        # Docker debe estar activo; BD dev en :54322
-pnpm test                       # contra appoint_test
-pnpm exec playwright test       # e2e (levanta su propio servidor)
+pnpm db:seed                    # opcional: popula demo "Salón Aura" + usuario OWNER
+pnpm test                       # contra appoint_test (317/317 tests)
+pnpm exec playwright test       # e2e: booking-flow + panel-approval
 pnpm dev                        # Next.js en localhost:3000
 ```
 
-`.env` no está en git: copiar `.env.example`. Sin `RESEND_API_KEY`/`CRON_SECRET` reales, el dev funciona igual (`ConsoleEmailSender` y el cron devuelve 401 si no mandas el header, pero puedes invocar `sendDueReminders` directamente desde un script si necesitas probarlo sin curl).
+`.env` no está en git: copiar `.env.example`. Las variables de Supabase Auth (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) y de demo owner (`DEMO_OWNER_EMAIL`, `DEMO_OWNER_PASSWORD`) ya están configuradas por defecto. Sin `RESEND_API_KEY` real, todos los emails (incluyendo los del panel) se registran en consola (`ConsoleEmailSender`) — suficiente para dev/QA manual. Sin `CRON_SECRET`, el endpoint `/api/cron/reminders` devuelve 401 pero puedes invocar el cron directamente desde un script si necesitas probarlo.
