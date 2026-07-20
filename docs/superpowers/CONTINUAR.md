@@ -1,15 +1,16 @@
 # Continuación del proyecto — estado y siguientes pasos
 
-_Actualizado: 2026-07-20 tras completar la Fase 5 (panel del negocio): 317/317 tests + lint + tsc + build + 2/2 Playwright en verde, rama `fase-5-panel` lista para revisión global (opus) antes del merge a `main`._
+_Actualizado: 2026-07-20 tras completar la Fase 5 (panel del negocio): revisión global aprobada (opus, "Ready to merge") y rama `fase-5-panel` mergeada a `main` (`76d0095`) y pusheada a origin. 323/323 tests + lint + tsc + build + 2/2 Playwright en verde._
 
 ## Estado actual
 
 - **Hecho**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`), Fase 3 (página pública, mergeada 2026-07-16), Fase 4 (emails y recordatorios, mergeada a `main` 2026-07-17) y **Fase 5 (panel del negocio)**.
 - **Fase 5 construido**: autenticación Supabase Auth (email+contraseña) con middleware de protección en `src/middleware.ts` + defensa en profundidad (`requirePanelSession()`); acceso actual restringido a **rol OWNER solo** (STAFF fuera de alcance); agenda `/panel` con vistas día/semana simplificadas (sin agrupar por franjas horarias), con acciones de aprobar/rechazar pendientes (con envío de emails), completar/no-show, cancelar y crear cita manual (nombre obligatorio, contacto opcional, nace `CONFIRMED`, respeta horario sin anti-fraude); CRUD de `/panel/servicios` (con `active` soft-toggle) y `/panel/equipo` (servicios por empleado, horarios semanales con múltiples tramos, ausencias); `/panel/clientes` (historial de citas + lista negra con block/unblock verificado end-to-end); `/panel/ajustes` (datos del negocio, tema con vista previa en vivo usando `getThemeCssVariables`, políticas de reserva, descarga QR de URL pública); emails nuevos (aprobación, rechazo, cancelación desde negocio) con tolerancia a contacto faltante (citas manuales sin email/teléfono cliente).
-- **Verificación**: 317/317 tests Vitest contra Postgres real + lint + tsc + build completo + 2/2 e2e Playwright (`booking-flow.spec.ts`, `panel-approval.spec.ts` con walkthroughs del flujo de aprobación) — todo verde; re-verificado en tarea final con escenarios reales del navegador.
+- **Verificación**: 323/323 tests Vitest contra Postgres real + lint + tsc + build completo + 2/2 e2e Playwright (`booking-flow.spec.ts`, `panel-approval.spec.ts` con walkthroughs del flujo de aprobación) — todo verde; re-verificado sobre `main` tras el merge.
 - **Disciplina multi-tenancy**: cada servicio del panel toma `businessId` explícito resuelto server-side desde la sesión (nunca de entrada cliente); operaciones state-changing usan `updateMany` atómico (businessId + estado origen en `where`) para evitar carreras cross-tenant; hallazgos de revisión de tareas atraparon y corrigieron brechas reales antes del merge (validación de `ServiceEmployee` contra businessId del llamante, retorno NOT_FOUND en blacklist cross-tenant).
+- **Revisión global (opus)**: veredicto _Ready to merge_. El único hallazgo Important — desactivar un empleado ocultaba de la agenda sus citas ya existentes (sin columna donde renderizarlas) — se corrigió en `1f239a4` (unión de empleados activos + inactivos-con-citas-en-rango, columna etiquetada "(inactivo)"). Este hallazgo solo era visible con perspectiva de rama completa, no por tarea.
 - **Proceso usado**: superpowers — writing-plans → subagent-driven-development (ledger en `.superpowers/sdd/progress.md`, gitignorado; si no existe, este documento es la fuente de verdad). Cada tarea pasó revisión por subagente; hallazgos se corrigieron en el momento.
-- **Política de modelos** (petición del usuario): haiku para tareas mecánicas, sonnet para implementación estándar, opus para revisión global (pendiente). El modelo principal solo orquesta.
+- **Política de modelos** (petición del usuario): haiku para tareas mecánicas, sonnet para implementación estándar, opus para revisión global. El modelo principal solo orquesta.
 
 ## Siguiente paso: Fase 6 — Super-admin + despliegue
 
