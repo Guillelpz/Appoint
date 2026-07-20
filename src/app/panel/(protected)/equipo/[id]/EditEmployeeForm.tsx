@@ -70,10 +70,13 @@ export function EditEmployeeForm({
           {services.length === 0 && <p className="text-sm text-slate-400 sm:col-span-3">No hay servicios activos todavía.</p>}
         </div>
       </fieldset>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-        Activo
-      </label>
+      <div className="text-sm">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          Activo
+        </label>
+        {active && <p className="mt-1 text-xs text-slate-400">Al desactivarlo, dejará de poder recibir nuevas reservas.</p>}
+      </div>
 
       {message && (
         <p className={`text-sm sm:col-span-2 ${message === 'Datos guardados.' ? 'text-slate-600' : 'rounded bg-red-50 px-3 py-2 text-red-700'}`}>

@@ -58,13 +58,17 @@ export async function createEmployeeForBusiness(
   if (!(await serviceIdsBelongToBusiness(prisma, businessId, input.serviceIds))) {
     return { ok: false, reason: 'INVALID_INPUT' };
   }
+  // Deduplicar antes de escribir: ServiceEmployee tiene una restricción única
+  // (serviceId, employeeId) — un caller que envíe el mismo id repetido (p. ej. un
+  // formulario con checkboxes mal serializados) provocaría un P2002 sin manejar.
+  const uniqueServiceIds = [...new Set(input.serviceIds)];
   const employee = await prisma.employee.create({
     data: {
       businessId,
       name: input.name.trim(),
       color: input.color,
       active: input.active,
-      services: { create: input.serviceIds.map((serviceId) => ({ serviceId })) },
+      services: { create: uniqueServiceIds.map((serviceId) => ({ serviceId })) },
     },
   });
   return { ok: true, employee };
@@ -93,6 +97,8 @@ export async function updateEmployeeForBusiness(
   if (!(await serviceIdsBelongToBusiness(prisma, businessId, input.serviceIds))) {
     return { ok: false, reason: 'INVALID_INPUT' };
   }
+  // Ver nota de deduplicación en createEmployeeForBusiness: mismo riesgo de P2002 aquí.
+  const uniqueServiceIds = [...new Set(input.serviceIds)];
 
   await prisma.$transaction([
     prisma.employee.update({
@@ -100,7 +106,7 @@ export async function updateEmployeeForBusiness(
       data: { name: input.name.trim(), color: input.color, active: input.active },
     }),
     prisma.serviceEmployee.deleteMany({ where: { employeeId } }),
-    prisma.serviceEmployee.createMany({ data: input.serviceIds.map((serviceId) => ({ serviceId, employeeId })) }),
+    prisma.serviceEmployee.createMany({ data: uniqueServiceIds.map((serviceId) => ({ serviceId, employeeId })) }),
   ]);
 
   const employee = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId } });

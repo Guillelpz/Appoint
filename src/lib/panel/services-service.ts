@@ -24,7 +24,8 @@ function isValidServiceInput(input: ServiceInput): boolean {
     input.priceCents >= 0 &&
     Number.isInteger(input.bufferAfterMinutes) &&
     input.bufferAfterMinutes >= 0 &&
-    input.bufferAfterMinutes <= 240
+    input.bufferAfterMinutes <= 240 &&
+    Number.isInteger(input.sortOrder)
   );
 }
 

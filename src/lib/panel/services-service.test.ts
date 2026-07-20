@@ -41,6 +41,22 @@ describe('createServiceForBusiness', () => {
 
     expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
   });
+
+  it('devuelve INVALID_INPUT si sortOrder no es un entero', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await createServiceForBusiness(prisma, seed.business.id, { ...VALID_INPUT, sortOrder: 1.5 });
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+  });
+
+  it('devuelve INVALID_INPUT si sortOrder es NaN', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await createServiceForBusiness(prisma, seed.business.id, { ...VALID_INPUT, sortOrder: NaN });
+
+    expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
+  });
 });
 
 describe('listServicesForBusiness', () => {

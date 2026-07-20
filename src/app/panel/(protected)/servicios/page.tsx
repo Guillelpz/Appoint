@@ -58,6 +58,9 @@ export default async function ServiciosPage({
                       {service.active ? 'Desactivar' : 'Activar'}
                     </button>
                   </form>
+                  {service.active && (
+                    <p className="mt-1 text-xs text-slate-400">Al desactivarlo, dejará de poder reservarse.</p>
+                  )}
                 </td>
               </tr>
             ))}

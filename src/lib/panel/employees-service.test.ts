@@ -65,6 +65,23 @@ describe('createEmployeeForBusiness', () => {
     const links = await prisma.serviceEmployee.findMany({ where: { serviceId: otherService.id } });
     expect(links).toHaveLength(0);
   });
+
+  it('deduplica serviceIds repetidos y crea exactamente un enlace por servicio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await createEmployeeForBusiness(prisma, seed.business.id, {
+      name: 'Laura Gómez',
+      color: '#00AA00',
+      active: true,
+      serviceIds: [seed.services.corteMujer.id, seed.services.corteMujer.id],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const withServices = await getEmployeeForBusiness(prisma, seed.business.id, result.employee.id);
+      expect(withServices?.services.map((s) => s.serviceId)).toEqual([seed.services.corteMujer.id]);
+    }
+  });
 });
 
 describe('listEmployeesForBusiness', () => {
@@ -101,6 +118,21 @@ describe('updateEmployeeForBusiness', () => {
     expect(result.ok).toBe(true);
     const withServices = await getEmployeeForBusiness(prisma, seed.business.id, seed.employees.carlos.id);
     expect(withServices?.name).toBe('Carlos Núñez (actualizado)');
+    expect(withServices?.services.map((s) => s.serviceId)).toEqual([seed.services.coloracion.id]);
+  });
+
+  it('deduplica serviceIds repetidos y crea exactamente un enlace por servicio', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await updateEmployeeForBusiness(prisma, seed.business.id, seed.employees.carlos.id, {
+      name: seed.employees.carlos.name,
+      color: seed.employees.carlos.color,
+      active: true,
+      serviceIds: [seed.services.coloracion.id, seed.services.coloracion.id],
+    });
+
+    expect(result.ok).toBe(true);
+    const withServices = await getEmployeeForBusiness(prisma, seed.business.id, seed.employees.carlos.id);
     expect(withServices?.services.map((s) => s.serviceId)).toEqual([seed.services.coloracion.id]);
   });
 
