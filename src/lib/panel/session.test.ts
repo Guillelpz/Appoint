@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
-import { getOwnerBusinessIdForUser } from './session';
+import { getOwnerBusinessIdForUser, isBusinessActive } from './session';
 
 describe('getOwnerBusinessIdForUser', () => {
   it('devuelve el businessId cuando el usuario tiene un Membership OWNER', async () => {
@@ -42,5 +42,24 @@ describe('getOwnerBusinessIdForUser', () => {
     const businessId = await getOwnerBusinessIdForUser(prisma, 'user-multi');
 
     expect(businessId).toBe(seedB.id);
+  });
+});
+
+describe('isBusinessActive', () => {
+  it('devuelve true si el negocio está activo', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    expect(await isBusinessActive(prisma, seed.business.id)).toBe(true);
+  });
+
+  it('devuelve false si el negocio está suspendido', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.business.update({ where: { id: seed.business.id }, data: { active: false } });
+
+    expect(await isBusinessActive(prisma, seed.business.id)).toBe(false);
+  });
+
+  it('devuelve false si el negocio no existe', async () => {
+    expect(await isBusinessActive(prisma, 'business-inexistente')).toBe(false);
   });
 });
