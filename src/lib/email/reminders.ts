@@ -35,6 +35,15 @@ export async function sendDueReminders(
       status: 'CONFIRMED',
       start: { gte: windowStart, lt: windowEnd },
       reminderSentAt: null,
+      // Un negocio suspendido por el super-admin (Fase 6) no puede operar en
+      // su página pública ni en el panel; sus citas no deben seguir
+      // generando recordatorios mientras dure la suspensión. No se duplica
+      // este filtro en el claim atómico de abajo: si el negocio se suspende
+      // justo entre esta selección y el claim, la peor consecuencia es un
+      // recordatorio de más para una ventana muy estrecha, mientras que si
+      // se reactiva antes de la siguiente pasada del cron, la cita ni
+      // siquiera llega a marcarse aquí y se recupera sola.
+      business: { active: true },
     },
     include: { service: true, employee: true, business: true },
   });

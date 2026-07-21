@@ -331,6 +331,30 @@ describe('sendDueReminders', () => {
     expect(refreshed.status).toBe('CANCELLED');
   });
 
+  it('no envía ni marca reminderSentAt para una cita CONFIRMED de un negocio suspendido (active: false)', async () => {
+    const start = new Date(NOW.getTime() + 24.5 * 60 * 60 * 1000);
+    const { seed, appointment } = await createConfirmedAppointment(start, 'recordatorio-negocio-suspendido@example.com');
+    // El negocio se suspende (super-admin) DESPUÉS de que el cliente reservase
+    // y confirmase la cita, pero ANTES de que corresponda enviar el
+    // recordatorio de 24h: un negocio suspendido no puede operar en su página
+    // pública ni en el panel, así que tampoco debe seguir mandando emails a
+    // sus clientes.
+    await prisma.business.update({ where: { id: seed.business.id }, data: { active: false } });
+    const emailSender = new FakeEmailSender();
+
+    const result = await sendDueReminders(prisma, { now: NOW, emailSender });
+
+    expect(result.sent).toBe(0);
+    expect(emailSender.sent).toHaveLength(0);
+
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    // No se marca como "recordada": la cita no llegó a seleccionarse para la
+    // pasada actual del cron (el negocio está suspendido), así que si se
+    // reactivase el negocio antes de que expire la ventana, el recordatorio
+    // aún podría enviarse en una pasada posterior.
+    expect(refreshed.reminderSentAt).toBeNull();
+  });
+
   it('marca reminderSentAt sin enviar email si la cita CONFIRMED no tiene email de cliente (alta manual sin contacto)', async () => {
     const seed = await seedDemoBusiness(prisma);
     const start = new Date(NOW.getTime() + 24.5 * 60 * 60 * 1000);
