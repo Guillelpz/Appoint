@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import type { PrismaClient } from '@prisma/client';
+import { getSupabaseAdminAuthClient } from '@/lib/supabase/admin';
 
 export interface DemoOwnerCredentials {
   email: string;
@@ -11,17 +11,6 @@ export function getDemoOwnerCredentials(): DemoOwnerCredentials {
     email: process.env.DEMO_OWNER_EMAIL || 'dueno@salonaura.example',
     password: process.env.DEMO_OWNER_PASSWORD || 'appoint-demo-2026',
   };
-}
-
-function getSupabaseAdminAuthClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRoleKey) {
-    throw new Error(
-      'NEXT_PUBLIC_SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son necesarias para crear el usuario dueño demo (Supabase Auth admin API). Revisa .env.'
-    );
-  }
-  return createClient(url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } }).auth.admin;
 }
 
 // Idempotente: si el usuario ya existe (createUser devuelve un error de
