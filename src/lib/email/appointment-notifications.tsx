@@ -48,7 +48,7 @@ export interface AppointmentEmailContext {
 // sendXEmail de este archivo lanza nunca. Un fallo de envío se registra en
 // consola y se refleja como { ok: false }, pero no rompe el flujo que la
 // invoca (reserva o cancelación ya han tenido éxito antes de llegar aquí).
-async function trySend(emailSender: EmailSender, message: EmailMessage): Promise<{ ok: boolean }> {
+export async function trySend(emailSender: EmailSender, message: EmailMessage): Promise<{ ok: boolean }> {
   try {
     await emailSender.send(message);
     return { ok: true };
