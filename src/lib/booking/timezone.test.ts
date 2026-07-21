@@ -4,6 +4,7 @@ import {
   localMinutesToUtc,
   addDaysToLocalDateString,
   parseLocalWallTimeToUtc,
+  getWeekStartLocalDateString,
   BUSINESS_TIMEZONE,
 } from './timezone';
 
@@ -38,5 +39,27 @@ describe('parseLocalWallTimeToUtc', () => {
   it('interpreta un string de datetime-local como hora de Europe/Madrid en horario de invierno (CET, UTC+1)', () => {
     const utc = parseLocalWallTimeToUtc('2026-01-15T09:00');
     expect(utc.toISOString()).toBe('2026-01-15T08:00:00.000Z');
+  });
+});
+
+describe('getWeekStartLocalDateString', () => {
+  it('devuelve el lunes de la semana cuando la fecha es un miércoles', () => {
+    // 2026-07-15 es miércoles
+    expect(getWeekStartLocalDateString('2026-07-15')).toBe('2026-07-13');
+  });
+
+  it('devuelve la misma fecha cuando ya es lunes', () => {
+    // 2026-07-13 es lunes
+    expect(getWeekStartLocalDateString('2026-07-13')).toBe('2026-07-13');
+  });
+
+  it('devuelve el lunes anterior cuando la fecha es domingo (fin de la semana ISO)', () => {
+    // 2026-07-19 es domingo, pertenece a la semana que empezó el 2026-07-13
+    expect(getWeekStartLocalDateString('2026-07-19')).toBe('2026-07-13');
+  });
+
+  it('cruza correctamente un cambio de mes', () => {
+    // 2026-08-01 es sábado, la semana empezó el 2026-07-27 (lunes)
+    expect(getWeekStartLocalDateString('2026-08-01')).toBe('2026-07-27');
   });
 });

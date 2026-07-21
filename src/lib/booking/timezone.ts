@@ -39,3 +39,15 @@ export function addDaysToLocalDateString(localDateStr: string, days: number): st
 export function parseLocalWallTimeToUtc(value: string, timezone: string = BUSINESS_TIMEZONE): Date {
   return fromZonedTime(value, timezone);
 }
+
+// Lunes (inicio de semana ISO) de la semana que contiene localDateStr, como
+// cadena YYYY-MM-DD. Igual que addDaysToLocalDateString, opera solo sobre el
+// calendario (sin zona horaria) porque localDateStr ya representa un día
+// local: no hace falta volver a convertir a UTC hasta construir los límites
+// finales con localMinutesToUtc (ver platform-metrics-service.ts).
+export function getWeekStartLocalDateString(localDateStr: string): string {
+  const [year, month, day] = localDateStr.split('-').map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay(); // 0=domingo..6=sábado
+  const daysSinceMonday = (weekday + 6) % 7;
+  return addDaysToLocalDateString(localDateStr, -daysSinceMonday);
+}
