@@ -84,6 +84,17 @@ model Membership {
   @@index([businessId])
 }
 
+// Rol de plataforma, independiente de MembershipRole (OWNER/STAFF son
+// roles DENTRO de un negocio; PlatformAdmin es transversal a todos los
+// negocios). Se modela como tabla propia, no como un valor más de
+// MembershipRole, porque un PlatformAdmin no tiene necesariamente
+// Membership en ningún negocio.
+model PlatformAdmin {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+}
+
 model Service {
   id                 String   @id @default(uuid())
   businessId         String
