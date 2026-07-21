@@ -1,73 +1,52 @@
 # Continuación del proyecto — estado y siguientes pasos
 
-_Actualizado: 2026-07-21, A MITAD DE LA FASE 6 (panel de super-admin). Este es un punto de control intermedio, no un cierre de fase — la rama `fase-6-superadmin` sigue sin mergear y quedan tareas por ejecutar. Léelo entero antes de tocar nada._
+_Actualizado: 2026-07-21 tras completar las 17 tareas de la Fase 6 (panel de super-admin): 351/351 Vitest + lint + tsc + build + 3/3 Playwright en verde (verificado en conjunto y con cada spec e2e en aislamiento). Pendiente la revisión global de rama (opus) y el merge a `main` — la rama `fase-6-superadmin` sigue sin mergear. El despliegue real (dominio, Vercel, Supabase producción) sigue sin empezar, ver "Después de la Fase 6" más abajo._
 
-## Cómo retomar esta sesión desde cero (LEE ESTO PRIMERO)
+## Estado actual
 
-1. **Rama activa:** `fase-6-superadmin` (creada desde `main` en el commit `2deaa27`, cierre de la Fase 5). Verifica con `git branch --show-current` y `git log --oneline -20`.
-2. **Plan en ejecución:** `docs/superpowers/plans/2026-07-21-fase-6-super-admin.md` (17 tareas, formato `superpowers:writing-plans`). Ábrelo para ver el detalle exacto de cada tarea (código completo, tests, comandos).
-3. **Ledger de progreso:** `.superpowers/sdd/progress.md` (gitignorado — solo existe en el filesystem de quien ha ido ejecutando). Busca la sección `# Ledger de progreso - plan Fase 6 super-admin`. Si existe, tiene una línea por tarea completada con el veredicto de su revisión — esa es la fuente más precisa. Si no existe (máquina/sesión distinta), usa la tabla de abajo.
-4. **Proceso:** `superpowers:writing-plans` → `superpowers:subagent-driven-development`. Cada tarea: implementador (subagente, modelo según la tabla) → revisor (subagente sonnet, spec + calidad) → si hay hallazgos Important/Critical, fix dispatch al mismo implementador → re-revisión → ledger. Al terminar las 17 tareas: revisión global de rama (opus) → aplicar sus fixes → re-revisión → `superpowers:finishing-a-development-branch` (merge a `main`, borrar rama, actualizar este documento de verdad — eso es la Tarea 17 del plan, que sustituirá este checkpoint intermedio por el cierre real).
-
-### Estado de las 17 tareas (a fecha de este checkpoint)
-
-| # | Tarea | Estado |
-|---|-------|--------|
-| 1 | Modelo `PlatformAdmin` + vars de entorno | ✅ hecha y revisada, sin hallazgos |
-| 2 | Cliente Admin API de Supabase compartido | ✅ hecha y revisada, sin hallazgos |
-| 3 | Seed idempotente del super-admin demo | ✅ hecha y revisada, sin hallazgos |
-| 4 | `requireAdminSession()` | ✅ hecha y revisada, sin hallazgos |
-| 5 | Cierra el bug de Fase 5 (`requirePanelSession` no comprobaba `Business.active`) | ✅ hecha y revisada, sin hallazgos |
-| 6 | Middleware protege `/admin/**` | ✅ hecha y revisada, sin hallazgos |
-| 7 | `/admin/login` | ✅ hecha y revisada, sin hallazgos |
-| 8 | `getWeekStartLocalDateString` | ✅ hecha y revisada, sin hallazgos |
-| 9 | `getPlatformMetrics` | ✅ hecha y revisada, sin hallazgos |
-| 10 | Dashboard `/admin` | ✅ hecha y revisada, sin hallazgos |
-| 11 | `OwnerInviter` inyectable | ✅ hecha y revisada, sin hallazgos |
-| 12 | `platform-business-service.ts` (alta + rollback + activar/suspender) | ✅ hecha y revisada, sin hallazgos |
-| 13 | Plantilla email "invitación de dueño" | ✅ hecha y revisada, sin hallazgos |
-| 14 | `/panel/invitacion` (fijar contraseña) | ✅ hecha y revisada. Encontró y corrigió un hallazgo Important de seguridad (ver abajo, `212b957`); el efecto secundario aceptado (limitación conocida) |
-| 15 | `/admin/negocios` (listado + alta + activar/suspender) | ⏳ pendiente — siguiente tarea a despachar |
-| 16 | e2e Playwright del flujo completo de super-admin | ⏳ pendiente |
-| 17 | Actualizar `CONTINUAR.md` (cierre real de la fase) | ⏳ pendiente — sustituirá este checkpoint |
-
-Último commit conocido en la rama al escribir esto: `212b957` (fix de seguridad de la Tarea 14). Suite en ese punto: 351/351 Vitest + tsc + lint + build limpios + 2/2 Playwright (`booking-flow.spec.ts`, `panel-approval.spec.ts` — el nuevo e2e de admin lo añade la Tarea 16).
-
-### Hallazgo de seguridad cerrado en la Tarea 14 (para que no se reintroduzca)
-
-La primera versión de `/panel/invitacion` (ruta pública, el dueño invitado llega sin sesión) tenía un atajo: si `getUser()` ya encontraba una sesión activa, saltaba `verifyOtp({token_hash, type:'invite'})` y llamaba `updateUser({password})` directamente. Esto permitía que **cualquier dueño ya autenticado** cambiara su contraseña visitando esta URL con un `token_hash` arbitrario (incluso inválido), sin validar la invitación — la ruta "pública" se convertía de facto en un endpoint de cambio de contraseña sin re-autenticación. Se corrigió en `212b957` eliminando el atajo por completo: `verifyOtp` se ejecuta siempre antes de `updateUser`.
-
-**Efecto secundario aceptado (a confirmar por la re-revisión en curso):** los tokens de invitación de Supabase son de un solo uso. Si `verifyOtp` tiene éxito pero `updateUser` falla en la MISMA petición (ej. un fallo transitorio), un reintento ya no puede aprovechar la sesión recién creada — el `token_hash` ya está consumido y el reintento fallaría con "enlace no válido o caducado", aunque la cookie de sesión siga viva. El dueño necesitaría una invitación nueva del super-admin. Es un caso muy estrecho (solo si `updateUser` falla justo después de un `verifyOtp` exitoso) y el fallo es "seguro" (bloquea, no abre una brecha) — se dejó documentado como limitación conocida en vez de añadir complejidad extra, pendiente del veredicto final de la re-revisión.
-
-## Decisiones tomadas con el usuario para la Fase 6 (no reabrir)
-
-1. **Alcance de esta fase: SOLO el panel de super-admin.** El despliegue real (dominio, Vercel, Supabase producción) queda explícitamente fuera — no hay ninguna tarea de despliegue en el plan. Se abordará en una fase/sesión separada cuando el usuario tenga el dominio comprado.
-2. **Modelo de super-admin: tabla propia `PlatformAdmin`** (no reutiliza `MembershipRole`, que sigue siendo solo OWNER/STAFF por negocio).
-3. **Alta de negocio con invitación real por email**: el super-admin crea el `Business` + invita al dueño real vía Supabase Auth Admin API (`generateLink({type:'invite'})` → `hashed_token`, NUNCA `action_link` — ver CLAUDE.md) + `Membership` OWNER, con rollback compensatorio si la invitación falla (el `Business` recién creado se borra, el `Membership` nunca llega a crearse en ese caso).
-4. **Dos campos de email separados** en el alta de negocio: `businessEmail` (opcional, contacto público del negocio, va a `Business.email`) y `ownerEmail` (obligatorio, solo para la invitación/login del dueño) — decisión tomada tras detectar la ambigüedad en la primera versión del plan.
-5. **Cerrado el bug real de Fase 5**: `requirePanelSession()` ahora comprueba también `Business.active` — un negocio suspendido bloquea también el acceso de su dueño a `/panel`, no solo la página pública.
-6. **Activar/suspender negocio**: toggle simple de `Business.active`, mismo patrón `updateMany` que `setServiceActive`/`setEmployeeActive` de la Fase 5.
-7. **Métricas simples**: negocios activos (count) + citas de la semana en curso (count, TODOS los estados, sin excluir negocios suspendidos — decisión consciente de simplicidad, ver `src/lib/admin/platform-metrics-service.ts`).
-
-## Estado acumulado (fases ya cerradas y mergeadas a `main`)
-
-- **Hecho y en `main`**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`), Fase 3 (página pública, mergeada 2026-07-16), Fase 4 (emails y recordatorios, mergeada 2026-07-17), Fase 5 (panel del negocio, mergeada 2026-07-20, `76d0095`).
-- **Fase 5 construyó**: autenticación Supabase Auth (email+contraseña) para dueños, agenda con aprobar/rechazar/completar/no-show/cancelar/alta manual, CRUD de servicios y equipo (horarios + ausencias), clientes + lista negra, ajustes con tema en vivo + QR. Rol OWNER solo; STAFF sigue sin UI/lógica de autorización.
-- **Fase 4 construyó**: capa de email intercambiable (Resend/consola), plantillas de confirmación/recordatorio/cancelación, doble paso de `manualApproval`, cron de recordatorios.
+- **Hecho**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`), Fase 3 (página pública, mergeada 2026-07-16), Fase 4 (emails y recordatorios, mergeada 2026-07-17), Fase 5 (panel del negocio, mergeada 2026-07-20, `76d0095`) y **Fase 6 — panel de super-admin**: 17/17 tareas implementadas y revisadas (limpio o corregido), pendiente solo de la revisión global de rama y el merge.
+- **Fase 6 construido** (todo en `src/lib/admin/`, `src/app/admin/`, más algunos toques en `src/lib/panel/` y `src/lib/booking/`):
+  - Modelo `PlatformAdmin` en tabla propia, independiente de `Membership`/`MembershipRole`.
+  - `requireAdminSession()` / `isPlatformAdmin` (`src/lib/admin/session.ts`), mismo patrón que `requirePanelSession()` pero sin `businessId`, redirige a `/admin/login`.
+  - Cliente Admin API de Supabase compartido (`src/lib/supabase/admin.ts`, extraído del seed de dueño demo de la Fase 5).
+  - Seed idempotente del super-admin demo (`src/lib/seed/demo-superadmin.ts`), conectado a `prisma/seed.ts` y a `e2e/global-setup.ts`.
+  - Middleware (`src/middleware.ts`) extendido para proteger `/admin/**` junto a `/panel/**` con un único refresco de cookie compartido.
+  - `/admin/login`.
+  - `getWeekStartLocalDateString` (`src/lib/booking/timezone.ts`) + `getPlatformMetrics` (`src/lib/admin/platform-metrics-service.ts`): negocios activos (count) y citas de la semana en curso (count, todos los estados), límites de semana en Europe/Madrid.
+  - Dashboard `/admin` con esas dos métricas.
+  - `OwnerInviter` / `getOwnerInviter()` (`src/lib/admin/owner-inviter.ts`): invitación real de dueños vía Supabase Auth Admin API usando `hashed_token`, **nunca** `action_link` (ver mecánica investigada más abajo).
+  - `platform-business-service.ts`: `createPlatformBusiness` (valida `RESERVED_SLUGS`, crea `Business` → invita al dueño → solo si la invitación tiene éxito crea el `Membership` OWNER; si falla, rollback compensatorio que borra el `Business` recién creado) y `setPlatformBusinessActive` (toggle simple).
+  - Plantilla de email "invitación de dueño" (`sendOwnerInvitationEmail`) — la plantilla que la Fase 4 excluyó explícitamente de su alcance.
+  - `/panel/invitacion`: ruta pública donde el dueño invitado fija su contraseña, `verifyOtp` + `updateUser` en un único Server Action (nunca en un Server Component).
+  - `/admin/negocios`: listado + formulario de alta con **dos campos de email separados** (`businessEmail` opcional/público, `ownerEmail` obligatorio/login) + activar/suspender.
+  - e2e completo del flujo real de super-admin a través de la UI (`e2e/admin-flow.spec.ts`).
+- **Bug real de Fase 5 cerrado en esta fase**: `requirePanelSession()` (`src/lib/panel/session.ts`) ahora también comprueba `Business.active` — un negocio suspendido bloquea también el acceso de su dueño a `/panel`, no solo la página pública de reservas.
+- **Hallazgo de seguridad encontrado y corregido durante la propia revisión de tarea de esta fase (Tarea 14)**: la primera versión de `/panel/invitacion` tenía un atajo que permitía a cualquiera con una sesión de `/panel` ya activa saltarse `verifyOtp` por completo y cambiar su contraseña con un `token_hash` arbitrario o inválido. Se corrigió eliminando el atajo (`212b957`): `verifyOtp` se ejecuta siempre antes de `updateUser`. Efecto secundario aceptado: los tokens de invitación son de un solo uso, así que si `updateUser` falla justo después de un `verifyOtp` con éxito en la misma petición, un reintento ya falla (token ya consumido) en vez de aprovechar la sesión recién creada por el atajo inseguro anterior — es un bloqueo estrecho y "seguro" (fail-closed), no una brecha, y no hay hoy una acción de "reenviar invitación" en `/admin` para ese caso raro (ver minors de Fase 6).
+- **Verificación**: `pnpm test` (Vitest contra Postgres real) + `pnpm lint` + `pnpm exec tsc --noEmit` + `pnpm build` + `pnpm exec playwright test` — 351/351 Vitest, todo lo demás limpio, y 3/3 specs Playwright (`booking-flow.spec.ts`, `panel-approval.spec.ts`, `admin-flow.spec.ts`), verificado tanto ejecutando la suite completa junta como cada spec por separado en aislamiento (ver nota sobre el flake de `panel-approval.spec.ts` más abajo).
+- **Disciplina multi-tenancy**: las funciones de `/admin` operan SIN `businessId` de sesión (alcance de plataforma, agregan sobre todos los negocios a propósito) y llevan el prefijo `Platform`/`Admin` en su nombre (`platform-business-service.ts`, `platform-metrics-service.ts`, `requireAdminSession`, `isPlatformAdmin`) para no confundirse con los servicios tenant-scoped de `src/lib/panel/*`.
+- **Proceso usado**: superpowers — writing-plans → subagent-driven-development. Plan en `docs/superpowers/plans/2026-07-21-fase-6-super-admin.md` (17 tareas). Cada tarea: implementador → revisor por subagente → fix dispatch si había hallazgos Important/Critical → re-revisión → ledger.
 - **Política de modelos** (petición del usuario, vigente en todas las fases): haiku para tareas mecánicas con código completo en el plan, sonnet para integración/implementación estándar/investigación, opus para la revisión global de rama al cerrar cada fase. El modelo principal solo orquesta.
 
-## Avisos técnicos vigentes para cuando se retome la Fase 6
+## Siguiente paso inmediato
 
-- **Contrato de `requireAdminSession()`** (`src/lib/admin/session.ts`): mismo patrón que `requirePanelSession()` pero contra `PlatformAdmin`, sin `businessId`, redirige a `/admin/login`.
-- **`OwnerInviter`/`getOwnerInviter()`** (`src/lib/admin/owner-inviter.ts`): patrón inyectable igual que `EmailSender` — la implementación real llama a `generateLink`, los tests inyectan un fake, nunca la API real de Supabase.
-- **`platform-business-service.ts`**: `createPlatformBusiness` valida `RESERVED_SLUGS` (`panel`, `admin`, `cita`, `confirmar`, `api`), crea `Business` → invita al dueño → solo si la invitación tiene éxito crea el `Membership` OWNER; si falla, borra el `Business` (rollback compensatorio) y devuelve `OWNER_INVITE_FAILED`. `setPlatformBusinessActive` es el toggle simple.
-- **`/panel/invitacion`**: ruta pública exacta (no dinámica) en el middleware — si se cambia su forma de URL, hay que actualizar `publicPaths` en `src/middleware.ts` a la vez.
-- **Tarea 15 (siguiente)** debe integrar: el formulario de alta de negocio con los dos campos de email separados, el listado con estado activo/suspendido, y los botones de activar/suspender — todo consumiendo `platform-business-service.ts` (Tarea 12), reutilizando los patrones de `/panel/servicios`/`/panel/equipo` de la Fase 5 (formularios controlados que preservan valores en error, patrón `?aviso=` para carreras perdidas).
-- **Tarea 16 (e2e)**: cubrir login super-admin + alta de negocio + (si es razonable sin depender de abrir un email real) verificación de que la invitación se generó correctamente + suspensión bloqueando `/panel` para el dueño. El plan documenta el alcance exacto que decidió el redactor — revisar esa tarea antes de escribir el test.
+1. **Revisión global de la rama `fase-6-superadmin` (opus)** — no hecha todavía. Aplicar sus fixes si los hay, re-verificar, y solo entonces `superpowers:finishing-a-development-branch` (merge a `main`, borrar rama, actualizar este documento con el commit de merge real — igual que se hizo para las Fases 3-5).
+2. Después de mergear: la Fase 6 completa el alcance funcional planificado del producto. Lo único explícitamente pendiente es el **despliegue real** (ver "Después de la Fase 6").
+
+## Mecánica investigada de la invitación de dueños (relevante para tocar este flujo en el futuro)
+
+`supabase.auth.admin.generateLink({ type: 'invite', email })` crea el usuario y devuelve `properties.hashed_token` + `properties.action_link`. Este proyecto usa `hashed_token` directamente (`/panel/invitacion?token_hash=...` + `supabase.auth.verifyOtp({token_hash, type:'invite'})`) y **nunca** `action_link`: el cliente de navegador (`createBrowserClient` de `@supabase/ssr`) fija `flowType: 'pkce'` de forma fija, y el `action_link` nativo de Supabase produce un callback de grant IMPLÍCITO (fragmento `#access_token=...`) que `@supabase/auth-js` rechaza con `AuthPKCEGrantCodeExchangeError` cuando el cliente está en modo PKCE. Ver el comentario completo en `src/lib/admin/owner-inviter.ts`.
+
+## Avisos técnicos para después de la Fase 6
+
+- **Despliegue real**: dominio propio, Vercel (build + Cron) y proyecto Supabase de producción siguen SIN EMPEZAR. Cuando se aborde: replicar en producción las variables de `.env.example` (incluidas las nuevas `DEMO_SUPERADMIN_EMAIL`/`DEMO_SUPERADMIN_PASSWORD` — o mejor, dar de alta ahí un super-admin real y no depender de esas credenciales demo en producción), y revisar `supabase/config.toml` (`site_url`/`additional_redirect_urls`) si en el futuro se decide usar el `action_link` nativo de Supabase para algún flujo (hoy no se usa, ver arriba). El usuario aún tiene que comprar el dominio; cuando lo haga, esto se aborda como una sesión guiada paso a paso, probablemente sin necesitar el ciclo completo `writing-plans`/`subagent-driven-development`.
+- **Patrón `OwnerInviter` inyectable** (`src/lib/admin/owner-inviter.ts`): mismo patrón que `EmailSender` — cualquier lógica nueva que dependa de la Admin API de Supabase Auth debería inyectarse igual, para poder testear con un Fake sin golpear el servicio real desde Vitest.
+- **Rol `STAFF`** sigue declarado en `MembershipRole` pero sin UI ni lógica de autorización — candidato para una fase futura si se decide dar acceso de panel a empleados, no solo a dueños.
+- El seed de super-admin (`src/lib/seed/demo-superadmin.ts`) es idempotente de principio a fin (aprendizaje de un bug real corregido a posteriori en el seed de negocio demo de Fase 5 — no repetido aquí).
+- **Flake conocido de infraestructura de test, NO introducido por esta fase** (diagnosticado durante la revisión de la Tarea 16): `e2e/panel-approval.spec.ts` puede fallar por timeout de compilación en frío si se ejecuta SOLO como el primer test de Playwright contra un `pnpm dev` recién arrancado (reproducido con `git stash` sin los cambios de esta fase, para confirmar que no es nuevo). Es estable cuando corren las 3 specs juntas (la forma normal de invocar `pnpm exec playwright test`), porque `admin-flow.spec.ts` (primero en orden alfabético) ya calienta las mismas rutas. Documentado para que nadie lo re-investigue desde cero ni intente "arreglarlo" reintroduciendo acoplamiento de fixtures compartidos entre specs.
 
 ## Minors conocidos (no bloquean; candidatos a limpieza oportunista)
 
-### Fase 4 y anteriores
+### Fase 4 + anteriores
 - Alternativas de hueco solo se ofrecen con `SLOT_TAKEN`; los mensajes de `EMPLOYEE_UNAVAILABLE`/`NO_EMPLOYEE_AVAILABLE` invitan a "otro horario" sin ofrecerlas (`booking-service.ts`).
 - Al volver de un error en la hoja de reserva, se pierden nombre/teléfono/email tecleados (remonta `StepCustomerData`).
 - El selector de día renderiza `maxBookingWindowDays` botones (30 por defecto; pesado si un negocio configura ventanas grandes).
@@ -76,38 +55,40 @@ La primera versión de `/panel/invitacion` (ruta pública, el dueño invitado ll
 - El copy "es mañana" del recordatorio es impreciso en los bordes del día (la ventana ahora es `[now+23h, now+25h)`); comparación no constant-time en `cron-auth` (aceptado: el secreto es de alta entropía).
 
 ### Fase 5
-- Vista de semana simplificada (columnas por empleado, sin franjas horarias).
-- Sin adjunto `.ics` en email de "cita aprobada" (solo enlace a `/cita/{token}`, decisión conservadora confirmada).
-- Sin paginación en `/panel/clientes` (revisar si el catálogo de clientes crece mucho).
-- Editores de horario y servicios sin claim atómico entre pestañas (riesgo bajo, dueño solo).
-- El slug `panel` está reservado de facto por la ruta del panel — el alta de negocios de la Fase 6 ya lo respeta vía `RESERVED_SLUGS` (junto con `admin`, `cita`, `confirmar`, `api`).
+- **Vista de semana simplificada**: misma columna por empleado, 7 días agregados en el mismo rango, sin agrupar por franjas horarias — funcional pero más simple que un calendario semanal clásico (iteración UI si es necesario).
+- **Sin adjunto `.ics` en email de "cita aprobada"**: solo enlace a `/cita/{token}`, que ya ofrece descarga `.ics` desde Fase 3 — decisión conservadora confirmada (no extender `EmailMessage` con adjuntos).
+- **Sin paginación en `/panel/clientes`**: razonable para volumen local, pero si el usuario anticipa cientos de clientes, revisar esta decisión.
+- **Editores de horario y servicios sin claim atómico**: si dos pestañas del panel editan lo mismo, la última en guardar gana (mismo patrón que resto de CRUD). Riesgo bajo (dueño solo, uso secuencial).
 - Una cita aprobada con menos de 23h de antelación no recibe recordatorio 24h (propiedad de diseño del cron, aceptada).
-- Las ausencias (`TimeOff`) no tienen límites de fecha razonables en el formulario.
+- Las ausencias (`TimeOff`) no tienen límites de fecha razonables en el formulario — sin precedente en el resto del formulario, documentado como conocido.
 
-### Fase 6 (en curso)
-- Ver "Hallazgo de seguridad cerrado en la Tarea 14" arriba: limitación conocida de reintento tras un `updateUser` fallido justo después de un `verifyOtp` exitoso (token de un solo uso ya consumido) — aceptada como fail-closed razonable por la revisión.
-- **No existe acción de "reenviar invitación"** en `/admin`: si el caso límite de arriba ocurre, el super-admin tendría que recurrir al dashboard/Admin API de Supabase directamente, no a la UI. Candidato a tarea pequeña futura (no bloqueante).
-- Política de contraseña del dueño invitado: mínimo 8 caracteres (`MIN_PASSWORD_LENGTH`), sin especificación explícita en la spec — revisar si se quiere algo más estricto.
-- `appointmentsThisWeekCount` cuenta todos los estados y no excluye negocios suspendidos (decisión consciente de simplicidad).
+### Fase 6
+- **`appointmentsThisWeekCount` cuenta todos los estados** (incluidas `CANCELLED`/`NO_SHOW`) y no excluye negocios suspendidos — decisión consciente de simplicidad (la spec solo pide "citas de la semana", sin más matices); revisar si en el futuro se quiere un contador "solo activas".
+- **Política de contraseña del dueño invitado**: mínimo 8 caracteres (`MIN_PASSWORD_LENGTH` en `src/app/panel/invitacion/actions.ts`), elegido en ausencia de una política explícita en la spec (Supabase Auth exige por defecto un mínimo de 6). Revisar si el usuario quiere una política más estricta.
+- **Sin paginación en `/admin/negocios`**: razonable mientras el número de negocios sea bajo; revisar si el catálogo crece mucho.
+- **No existe acción de "reenviar invitación"** en `/admin`: si el caso límite documentado arriba ocurre (`updateUser` falla justo tras un `verifyOtp` con éxito), el super-admin tendría que recurrir al dashboard/Admin API de Supabase directamente, no a la UI. Candidato a tarea pequeña futura, no bloqueante.
+- **`e2e/admin-flow.spec.ts` usa un nombre de negocio fijo** (`'Negocio E2E'`; solo el slug/email llevan timestamp) — frágil solo si una ejecución se mata a la fuerza antes de que corra su `afterAll` de limpieza (los fallos normales de test sí ejecutan `afterAll`). No corregido en esta fase; candidato a limpieza oportunista.
+- Flake conocido de `panel-approval.spec.ts` en aislamiento (no introducido por esta fase) — ver "Avisos técnicos para después de la Fase 6" arriba.
 
 ## Avisos del motor que siguen vigentes
 
 - **Dedupe de huecos**: con "cualquier profesional" el motor devuelve un slot por empleado; la capa pública ya deduplica por `start` (`getDedupedAvailableSlotsForBusiness`).
-- **`manualApproval`**: cambio de comportamiento real en `confirmAppointment` (no solo copy) — con `manualApproval = true`, la cita pasa a `PENDING` esperando aprobación del negocio en `/panel`.
+- **`manualApproval`**: cambio de comportamiento real en `confirmAppointment` (no solo copy) — con `manualApproval = true`, la cita pasa a `PENDING` esperando aprobación del negocio en `/panel`, con envío de email de aprobación cuando se confirma.
 
 ## Después de la Fase 6
 
-- **Despliegue real**: dominio, certificados, Vercel + Supabase en producción — sigue explícitamente pendiente, sin ningún plan ejecutado todavía al respecto. Cuando el usuario compre el dominio, abordarlo como su propia sesión/plan (probablemente no necesita `writing-plans`/`subagent-driven-development` completo, es más guía paso a paso que código).
-- Rol `STAFF`: declarado en el enum pero sin UI ni lógica de autorización — candidato para una fase futura si se decide dar acceso de panel a empleados.
+- **Revisión global de rama + merge a `main`**: siguiente paso inmediato, no hecho todavía (ver "Siguiente paso inmediato" arriba).
+- **Despliegue real**: dominio, certificados, Vercel + Supabase en producción — sigue explícitamente pendiente, no cubierto por ningún plan ejecutado hasta ahora. Es el siguiente paso real del usuario tras comprar el dominio.
+- **Rol `STAFF`**: declarado en el enum pero sin UI ni lógica de autorización — candidato para una fase futura si se decide dar acceso de panel a empleados.
 
 ## Cómo arrancar el entorno
 
 ```powershell
 pnpm exec supabase start        # Docker debe estar activo; BD dev en :54322
-pnpm db:seed                    # negocio demo "Salón Aura" + dueño OWNER + super-admin demo
+pnpm db:seed                    # opcional: popula demo "Salón Aura" + dueño OWNER + super-admin
 pnpm test                       # contra appoint_test
-pnpm exec playwright test       # e2e: booking-flow + panel-approval (+ admin-flow cuando exista la Tarea 16)
+pnpm exec playwright test       # e2e: booking-flow + panel-approval + admin-flow
 pnpm dev                        # Next.js en localhost:3000
 ```
 
-`.env` no está en git: copiar `.env.example`. Variables de Supabase Auth (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`), demo owner (`DEMO_OWNER_EMAIL`, `DEMO_OWNER_PASSWORD`) y demo super-admin (`DEMO_SUPERADMIN_EMAIL`, `DEMO_SUPERADMIN_PASSWORD`) ya configuradas por defecto en `.env.example`. Sin `RESEND_API_KEY` real, todos los emails (incluida la invitación de dueño) se registran en consola (`ConsoleEmailSender`).
+`.env` no está en git: copiar `.env.example`. Las variables de Supabase Auth (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`), de demo owner (`DEMO_OWNER_EMAIL`, `DEMO_OWNER_PASSWORD`) y de demo super-admin (`DEMO_SUPERADMIN_EMAIL`, `DEMO_SUPERADMIN_PASSWORD`) ya están configuradas por defecto. Sin `RESEND_API_KEY` real, todos los emails (incluidos la invitación de dueño y los del panel) se registran en consola (`ConsoleEmailSender`) — suficiente para dev/QA manual. Sin `CRON_SECRET`, el endpoint `/api/cron/reminders` devuelve 401 pero puedes invocar el cron directamente desde un script si necesitas probarlo.
