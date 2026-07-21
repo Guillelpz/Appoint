@@ -27,6 +27,14 @@ const PROTECTED_ZONES: ProtectedZone[] = [
 // Supabase recomienda esta doble comprobación porque una cookie de sesión
 // presente pero inválida solo se detecta al llamar a supabase.auth.getUser()
 // (valida contra el servidor), no solo por su presencia.
+//
+// IMPORTANTE: este middleware solo comprueba PRESENCIA de sesión (¿hay un
+// usuario autenticado?), no el ROL de ese usuario (dueño de panel vs.
+// super-admin, ni pertenencia a un negocio concreto). Cada page/route handler
+// bajo /admin/** DEBE llamar por su cuenta a requireAdminSession() (y cada
+// uno bajo /panel/** a requirePanelSession()) para exigir el rol correcto —
+// tal y como ya hacen todos los actuales. No asumir que pasar este
+// middleware implica autorización suficiente.
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
