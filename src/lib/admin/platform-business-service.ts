@@ -150,3 +150,69 @@ export async function setPlatformBusinessActive(
   const business = await prisma.business.findUniqueOrThrow({ where: { id: businessId } });
   return { ok: true, business };
 }
+
+export type ResendOwnerInvitationResult =
+  | { ok: true; business: Business; ownerEmail: string; invitationTokenHash: string }
+  | { ok: false; reason: 'NOT_FOUND' | 'ALREADY_COMPLETED' | 'OWNER_INVITE_FAILED' };
+
+// Recuperación manual para el caso límite documentado en CONTINUAR.md
+// (verifyOtp con éxito pero updateUser falla justo después): reutiliza
+// ownerInviter.generateInviteLink, el mismo mecanismo que el alta inicial,
+// generando un hashed_token nuevo. `getInvitationStatus` es quien decide si
+// procede (ALREADY_COMPLETED si el dueño ya fijó su contraseña).
+export async function resendOwnerInvitation(
+  prisma: PrismaClient,
+  ownerInviter: OwnerInviter,
+  businessId: string
+): Promise<ResendOwnerInvitationResult> {
+  const business = await prisma.business.findUnique({ where: { id: businessId } });
+  if (!business) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+  const membership = await prisma.membership.findFirst({ where: { businessId, role: 'OWNER' } });
+  if (!membership) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+  const status = await ownerInviter.getInvitationStatus(membership.userId);
+  if (!status) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+  if (status.completed) {
+    return { ok: false, reason: 'ALREADY_COMPLETED' };
+  }
+
+  try {
+    const invite = await ownerInviter.generateInviteLink(status.email);
+    return { ok: true, business, ownerEmail: status.email, invitationTokenHash: invite.hashedToken };
+  } catch (error) {
+    console.error('[admin] fallo al reenviar la invitación al dueño', { businessId, error });
+    return { ok: false, reason: 'OWNER_INVITE_FAILED' };
+  }
+}
+
+// Si no se puede resolver el estado de un negocio (sin Membership OWNER, o
+// la Admin API no devuelve el usuario) se trata como "completada": oculta
+// el botón de reenviar en vez de mostrarlo para un caso que no se sabe
+// arreglar desde la UI (evita un botón que siempre fallaría).
+export async function getOwnerInvitationCompletionMap(
+  prisma: PrismaClient,
+  ownerInviter: OwnerInviter,
+  businessIds: string[]
+): Promise<Map<string, boolean>> {
+  const memberships = await prisma.membership.findMany({
+    where: { businessId: { in: businessIds }, role: 'OWNER' },
+  });
+  const entries = await Promise.all(
+    memberships.map(async (membership) => {
+      const status = await ownerInviter.getInvitationStatus(membership.userId);
+      return [membership.businessId, status?.completed ?? true] as const;
+    })
+  );
+  const map = new Map(entries);
+  for (const businessId of businessIds) {
+    if (!map.has(businessId)) {
+      map.set(businessId, true);
+    }
+  }
+  return map;
+}

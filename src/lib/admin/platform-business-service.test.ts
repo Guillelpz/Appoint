@@ -4,15 +4,30 @@ import {
   listPlatformBusinesses,
   createPlatformBusiness,
   setPlatformBusinessActive,
+  resendOwnerInvitation,
+  getOwnerInvitationCompletionMap,
   type NewBusinessInput,
 } from './platform-business-service';
-import type { OwnerInviter, OwnerInvitationLink } from './owner-inviter';
+import type { OwnerInviter, OwnerInvitationLink, OwnerInvitationStatus } from './owner-inviter';
 
 class FakeOwnerInviter implements OwnerInviter {
   calls: string[] = [];
+  statuses = new Map<string, OwnerInvitationStatus>();
+
   async generateInviteLink(email: string): Promise<OwnerInvitationLink> {
     this.calls.push(email);
     return { userId: `fake-user-${email}`, hashedToken: `fake-token-${email}` };
+  }
+
+  async getInvitationStatus(userId: string): Promise<OwnerInvitationStatus | null> {
+    return this.statuses.get(userId) ?? null;
+  }
+
+  async markInvitationCompleted(userId: string): Promise<void> {
+    const existing = this.statuses.get(userId);
+    if (existing) {
+      this.statuses.set(userId, { ...existing, completed: true });
+    }
   }
 }
 
@@ -20,6 +35,12 @@ class FailingOwnerInviter implements OwnerInviter {
   async generateInviteLink(): Promise<OwnerInvitationLink> {
     throw new Error('fallo de red simulado');
   }
+
+  async getInvitationStatus(): Promise<OwnerInvitationStatus | null> {
+    return null;
+  }
+
+  async markInvitationCompleted(): Promise<void> {}
 }
 
 const VALID_INPUT: NewBusinessInput = {
@@ -191,5 +212,83 @@ describe('listPlatformBusinesses', () => {
     const pageLast = await listPlatformBusinesses(prisma, lastPage);
     expect(pageLast.hasNextPage).toBe(false);
     expect(pageLast.hasPreviousPage).toBe(true);
+  });
+});
+
+describe('resendOwnerInvitation', () => {
+  it('reenvía la invitación si el dueño no ha completado el alta', async () => {
+    const inviter = new FakeOwnerInviter();
+    const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
+    if (!created.ok) throw new Error('esperaba ok:true');
+    inviter.statuses.set(created.ownerUserId, { email: VALID_INPUT.ownerEmail, completed: false });
+    inviter.calls = [];
+
+    const result = await resendOwnerInvitation(prisma, inviter, created.business.id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('esperaba ok:true');
+    expect(result.ownerEmail).toBe(VALID_INPUT.ownerEmail);
+    expect(inviter.calls).toEqual([VALID_INPUT.ownerEmail]);
+  });
+
+  it('devuelve ALREADY_COMPLETED si el dueño ya fijó su contraseña', async () => {
+    const inviter = new FakeOwnerInviter();
+    const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
+    if (!created.ok) throw new Error('esperaba ok:true');
+    inviter.statuses.set(created.ownerUserId, { email: VALID_INPUT.ownerEmail, completed: true });
+
+    const result = await resendOwnerInvitation(prisma, inviter, created.business.id);
+
+    expect(result).toEqual({ ok: false, reason: 'ALREADY_COMPLETED' });
+  });
+
+  it('devuelve NOT_FOUND si el negocio no existe', async () => {
+    const inviter = new FakeOwnerInviter();
+
+    const result = await resendOwnerInvitation(prisma, inviter, 'negocio-inexistente');
+
+    expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
+  });
+
+  it('devuelve OWNER_INVITE_FAILED si el reenvío falla', async () => {
+    const inviter = new FakeOwnerInviter();
+    const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
+    if (!created.ok) throw new Error('esperaba ok:true');
+    inviter.statuses.set(created.ownerUserId, { email: VALID_INPUT.ownerEmail, completed: false });
+    const failingInviter: OwnerInviter = {
+      generateInviteLink: async () => {
+        throw new Error('fallo de red simulado');
+      },
+      getInvitationStatus: () => inviter.getInvitationStatus(created.ownerUserId),
+      markInvitationCompleted: async () => {},
+    };
+
+    const result = await resendOwnerInvitation(prisma, failingInviter, created.business.id);
+
+    expect(result).toEqual({ ok: false, reason: 'OWNER_INVITE_FAILED' });
+  });
+});
+
+describe('getOwnerInvitationCompletionMap', () => {
+  it('devuelve el estado de finalización de cada negocio por su dueño', async () => {
+    const inviter = new FakeOwnerInviter();
+    const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
+    if (!created.ok) throw new Error('esperaba ok:true');
+    inviter.statuses.set(created.ownerUserId, { email: VALID_INPUT.ownerEmail, completed: true });
+
+    const map = await getOwnerInvitationCompletionMap(prisma, inviter, [created.business.id]);
+
+    expect(map.get(created.business.id)).toBe(true);
+  });
+
+  it('trata como completada (oculta el botón) si no se puede resolver el estado', async () => {
+    const inviter = new FakeOwnerInviter();
+    const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
+    if (!created.ok) throw new Error('esperaba ok:true');
+    // sin registrar el status en el fake => getInvitationStatus devuelve null
+
+    const map = await getOwnerInvitationCompletionMap(prisma, inviter, [created.business.id]);
+
+    expect(map.get(created.business.id)).toBe(true);
   });
 });
