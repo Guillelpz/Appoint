@@ -4,9 +4,15 @@ import { prisma } from '@/lib/db';
 import { listCustomersForBusiness } from '@/lib/panel/customers-service';
 import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
 
-export default async function ClientesPage() {
+export default async function ClientesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const { businessId } = await requirePanelSession();
-  const customers = await listCustomersForBusiness(prisma, businessId);
+  const { page } = await searchParams;
+  const currentPage = Math.max(1, Number(page) || 1);
+  const { items: customers, hasNextPage, hasPreviousPage } = await listCustomersForBusiness(prisma, businessId, currentPage);
 
   return (
     <div className="space-y-6">
@@ -53,6 +59,24 @@ export default async function ClientesPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex items-center justify-between text-sm">
+        {hasPreviousPage ? (
+          <Link href={`/panel/clientes?page=${currentPage - 1}`} className="text-slate-600 underline">
+            Anterior
+          </Link>
+        ) : (
+          <span className="text-slate-300">Anterior</span>
+        )}
+        <span className="text-slate-500">Página {currentPage}</span>
+        {hasNextPage ? (
+          <Link href={`/panel/clientes?page=${currentPage + 1}`} className="text-slate-600 underline">
+            Siguiente
+          </Link>
+        ) : (
+          <span className="text-slate-300">Siguiente</span>
+        )}
       </div>
     </div>
   );

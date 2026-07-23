@@ -1,4 +1,5 @@
 import type { PrismaClient, Customer, BlacklistEntry } from '@prisma/client';
+import { PAGE_SIZE, paginationMeta, type PaginatedResult } from '../pagination';
 
 export interface CustomerListItem extends Customer {
   appointmentCount: number;
@@ -6,17 +7,25 @@ export interface CustomerListItem extends Customer {
   blacklisted: boolean;
 }
 
-export async function listCustomersForBusiness(prisma: PrismaClient, businessId: string): Promise<CustomerListItem[]> {
+export async function listCustomersForBusiness(
+  prisma: PrismaClient,
+  businessId: string,
+  page: number = 1
+): Promise<PaginatedResult<CustomerListItem>> {
+  const { safePage, hasNextPage, hasPreviousPage } = paginationMeta(page, await prisma.customer.count({ where: { businessId } }));
+
   const [customers, blacklistEntries] = await Promise.all([
     prisma.customer.findMany({
       where: { businessId },
       include: { appointments: { select: { start: true } } },
       orderBy: { name: 'asc' },
+      skip: (safePage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     }),
     prisma.blacklistEntry.findMany({ where: { businessId } }),
   ]);
 
-  return customers.map((customer) => {
+  const items = customers.map((customer) => {
     const starts = customer.appointments.map((a) => a.start.getTime());
     // entry.phone/email se comprueban como truthy ANTES de comparar: así un
     // customer.phone === null nunca "empareja" con una entrada de blacklist
@@ -31,6 +40,8 @@ export async function listCustomersForBusiness(prisma: PrismaClient, businessId:
       blacklisted,
     };
   });
+
+  return { items, hasNextPage, hasPreviousPage };
 }
 
 export interface CustomerDetail extends Customer {

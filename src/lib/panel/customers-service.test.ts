@@ -33,12 +33,42 @@ describe('listCustomersForBusiness', () => {
     const seed = await seedDemoBusiness(prisma);
     await bookForCustomer(seed.business.id, seed.services.corteHombre.id, seed.employees.marta.id, 'listado@example.com', new Date('2026-07-14T08:00:00.000Z'));
 
-    const customers = await listCustomersForBusiness(prisma, seed.business.id);
-    const target = customers.find((c) => c.email === 'listado@example.com');
+    const result = await listCustomersForBusiness(prisma, seed.business.id);
+    const target = result.items.find((c) => c.email === 'listado@example.com');
 
     expect(target?.appointmentCount).toBe(1);
     expect(target?.lastAppointmentStart).toEqual(new Date('2026-07-14T08:00:00.000Z'));
     expect(target?.blacklisted).toBe(false);
+  });
+
+  it('pagina de 20 en 20 y calcula hasNextPage/hasPreviousPage', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const before = await prisma.customer.count({ where: { businessId: seed.business.id } });
+    for (let i = 0; i < 25; i++) {
+      await prisma.customer.create({
+        data: { businessId: seed.business.id, name: `Cliente paginado ${i}`, phone: `+3460000${String(i).padStart(4, '0')}`, email: null },
+      });
+    }
+    const total = before + 25;
+
+    const page1 = await listCustomersForBusiness(prisma, seed.business.id, 1);
+    expect(page1.items).toHaveLength(20);
+    expect(page1.hasPreviousPage).toBe(false);
+    expect(page1.hasNextPage).toBe(true);
+
+    const lastPage = Math.ceil(total / 20);
+    const pageLast = await listCustomersForBusiness(prisma, seed.business.id, lastPage);
+    expect(pageLast.hasNextPage).toBe(false);
+    expect(pageLast.hasPreviousPage).toBe(true);
+  });
+
+  it('devuelve una página vacía sin romper si page está fuera de rango', async () => {
+    const seed = await seedDemoBusiness(prisma);
+
+    const result = await listCustomersForBusiness(prisma, seed.business.id, 999);
+
+    expect(result.items).toEqual([]);
+    expect(result.hasNextPage).toBe(false);
   });
 });
 
