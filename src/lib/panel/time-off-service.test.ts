@@ -77,11 +77,15 @@ describe('createTimeOffForEmployee — límites de fecha', () => {
   });
 
   it('acepta una ausencia de exactamente 90 días', async () => {
+    // Usa a Carlos, no a Marta: el fixture de seedDemoBusiness crea una
+    // ausencia fija para Marta el 2026-08-15 (ver demo-business.ts), que
+    // caería dentro de este rango de 90 días y daría OVERLAPPING en vez de
+    // probar el límite de duración que este test quiere aislar.
     const seed = await seedDemoBusiness(prisma);
     const start = new Date('2026-08-02T00:00:00.000Z');
     const end = new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-    const result = await createTimeOffForEmployee(prisma, seed.business.id, seed.employees.marta.id, {
+    const result = await createTimeOffForEmployee(prisma, seed.business.id, seed.employees.carlos.id, {
       start,
       end,
       reason: null,
