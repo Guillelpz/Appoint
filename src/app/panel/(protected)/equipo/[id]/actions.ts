@@ -21,6 +21,18 @@ const WORKING_HOURS_ERROR_MESSAGES: Record<'INVALID_INPUT' | 'NOT_FOUND', string
   NOT_FOUND: 'Ese empleado ya no existe o no pertenece a tu negocio.',
 };
 
+const TIME_OFF_ERROR_AVISOS: Record<
+  'INVALID_INPUT' | 'NOT_FOUND' | 'START_IN_PAST' | 'DURATION_TOO_LONG' | 'TOO_FAR_IN_FUTURE' | 'OVERLAPPING',
+  string
+> = {
+  INVALID_INPUT: 'ausencia-invalida',
+  NOT_FOUND: 'accion-no-aplicada',
+  START_IN_PAST: 'ausencia-en-el-pasado',
+  DURATION_TOO_LONG: 'ausencia-demasiado-larga',
+  TOO_FAR_IN_FUTURE: 'ausencia-demasiado-lejana',
+  OVERLAPPING: 'ausencia-solapada',
+};
+
 export async function replaceWorkingHoursAction(
   employeeId: string,
   blocks: WorkingHoursBlockInput[]
@@ -58,7 +70,7 @@ export async function createTimeOffAction(employeeId: string, formData: FormData
   const result = await createTimeOffForEmployee(prisma, businessId, employeeId, { start, end, reason });
   revalidatePath(`/panel/equipo/${employeeId}`);
   if (!result.ok) {
-    redirectToEmployeeNotice(employeeId, result.reason === 'NOT_FOUND' ? 'accion-no-aplicada' : 'ausencia-invalida');
+    redirectToEmployeeNotice(employeeId, TIME_OFF_ERROR_AVISOS[result.reason]);
   }
 }
 

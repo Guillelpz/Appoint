@@ -12,6 +12,10 @@ import { createTimeOffAction, deleteTimeOffAction } from './actions';
 const AVISO_MESSAGES: Record<string, string> = {
   'accion-no-aplicada': 'Esa acción ya no se puede aplicar: el empleado o la ausencia cambiaron mientras tanto. La página se ha actualizado.',
   'ausencia-invalida': 'Revisa las fechas de la ausencia: el fin debe ser posterior al inicio.',
+  'ausencia-en-el-pasado': 'La ausencia no puede empezar en el pasado.',
+  'ausencia-demasiado-larga': 'Una ausencia no puede durar más de 90 días. Divídela en varias si hace falta.',
+  'ausencia-demasiado-lejana': 'No se pueden crear ausencias con más de 2 años de antelación.',
+  'ausencia-solapada': 'Ese empleado ya tiene otra ausencia que se solapa con esas fechas.',
 };
 
 export default async function EmployeeDetailPage({
