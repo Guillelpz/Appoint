@@ -14,11 +14,12 @@ function formatDate(date: Date): string {
 export default async function AdminNegociosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ aviso?: string }>;
+  searchParams: Promise<{ aviso?: string; page?: string }>;
 }) {
   await requireAdminSession();
-  const { aviso } = await searchParams;
-  const businesses = await listPlatformBusinesses(prisma);
+  const { aviso, page } = await searchParams;
+  const currentPage = Math.max(1, Number(page) || 1);
+  const { items: businesses, hasNextPage, hasPreviousPage } = await listPlatformBusinesses(prisma, currentPage);
 
   return (
     <div className="space-y-6">
@@ -69,6 +70,24 @@ export default async function AdminNegociosPage({
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex items-center justify-between text-sm">
+        {hasPreviousPage ? (
+          <Link href={`/admin/negocios?page=${currentPage - 1}`} className="text-slate-600 underline">
+            Anterior
+          </Link>
+        ) : (
+          <span className="text-slate-300">Anterior</span>
+        )}
+        <span className="text-slate-500">Página {currentPage}</span>
+        {hasNextPage ? (
+          <Link href={`/admin/negocios?page=${currentPage + 1}`} className="text-slate-600 underline">
+            Siguiente
+          </Link>
+        ) : (
+          <span className="text-slate-300">Siguiente</span>
+        )}
       </div>
 
       <CreateBusinessForm />

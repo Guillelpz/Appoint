@@ -164,8 +164,32 @@ describe('listPlatformBusinesses', () => {
     });
     if (!first.ok || !second.ok) throw new Error('esperaba ok:true');
 
-    const list = await listPlatformBusinesses(prisma);
+    const result = await listPlatformBusinesses(prisma);
 
-    expect(list.map((b) => b.id)).toEqual([second.business.id, first.business.id]);
+    expect(result.items.map((b) => b.id)).toEqual([second.business.id, first.business.id]);
+  });
+
+  it('pagina de 20 en 20 y calcula hasNextPage/hasPreviousPage', async () => {
+    const inviter = new FakeOwnerInviter();
+    const before = await prisma.business.count();
+    for (let i = 0; i < 25; i++) {
+      await createPlatformBusiness(prisma, inviter, {
+        ...VALID_INPUT,
+        slug: `negocio-paginado-${i}`,
+        businessEmail: null,
+        ownerEmail: `dueno-paginado-${i}@example.com`,
+      });
+    }
+    const total = before + 25;
+
+    const page1 = await listPlatformBusinesses(prisma, 1);
+    expect(page1.items).toHaveLength(20);
+    expect(page1.hasPreviousPage).toBe(false);
+    expect(page1.hasNextPage).toBe(true);
+
+    const lastPage = Math.ceil(total / 20);
+    const pageLast = await listPlatformBusinesses(prisma, lastPage);
+    expect(pageLast.hasNextPage).toBe(false);
+    expect(pageLast.hasPreviousPage).toBe(true);
   });
 });

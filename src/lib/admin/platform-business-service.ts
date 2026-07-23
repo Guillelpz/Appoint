@@ -1,6 +1,7 @@
 import { Prisma, BusinessType } from '@prisma/client';
 import type { PrismaClient, Business } from '@prisma/client';
 import type { OwnerInviter, OwnerInvitationLink } from './owner-inviter';
+import { PAGE_SIZE, paginationMeta, type PaginatedResult } from '../pagination';
 
 export interface PlatformBusinessSummary {
   id: string;
@@ -54,9 +55,18 @@ function isValidNewBusinessInput(input: NewBusinessInput): boolean {
   );
 }
 
-export async function listPlatformBusinesses(prisma: PrismaClient): Promise<PlatformBusinessSummary[]> {
-  const businesses = await prisma.business.findMany({ orderBy: { createdAt: 'desc' } });
-  return businesses.map((b) => ({ id: b.id, slug: b.slug, name: b.name, active: b.active, createdAt: b.createdAt }));
+export async function listPlatformBusinesses(prisma: PrismaClient, page: number = 1): Promise<PaginatedResult<PlatformBusinessSummary>> {
+  const { safePage, hasNextPage, hasPreviousPage } = paginationMeta(page, await prisma.business.count());
+  const businesses = await prisma.business.findMany({
+    orderBy: { createdAt: 'desc' },
+    skip: (safePage - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
+  });
+  return {
+    items: businesses.map((b) => ({ id: b.id, slug: b.slug, name: b.name, active: b.active, createdAt: b.createdAt })),
+    hasNextPage,
+    hasPreviousPage,
+  };
 }
 
 // Alcance de plataforma (no tenant-scoped, opera sin businessId de sesión):
