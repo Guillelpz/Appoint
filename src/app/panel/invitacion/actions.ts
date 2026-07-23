@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getOwnerInviter } from '@/lib/admin/owner-inviter';
 
 export interface AcceptInvitationResult {
   ok: false;
@@ -47,8 +48,8 @@ export async function acceptOwnerInvitationAction(input: {
 
   const supabase = await createSupabaseServerClient();
 
-  const { error: verifyError } = await supabase.auth.verifyOtp({ token_hash: input.tokenHash, type: 'invite' });
-  if (verifyError) {
+  const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({ token_hash: input.tokenHash, type: 'invite' });
+  if (verifyError || !verifyData.user) {
     return {
       ok: false,
       message: 'El enlace de invitación no es válido o ha caducado. Pide al super-admin que te envíe uno nuevo.',
@@ -58,6 +59,17 @@ export async function acceptOwnerInvitationAction(input: {
   const { error: updateError } = await supabase.auth.updateUser({ password: input.password });
   if (updateError) {
     return { ok: false, message: 'No se pudo establecer la contraseña. Inténtalo de nuevo.' };
+  }
+
+  // Señal propia para que /admin/negocios sepa que ya no hace falta poder
+  // reenviar la invitación (ver owner-inviter.ts). Best-effort: si falla, no
+  // bloquea al dueño (ya tiene contraseña y sesión funcionando), solo deja
+  // el botón "Reenviar invitación" visible de más en /admin hasta que se
+  // reintente.
+  try {
+    await getOwnerInviter().markInvitationCompleted(verifyData.user.id);
+  } catch (error) {
+    console.error('[panel] no se pudo marcar la invitación como completada', { userId: verifyData.user.id, error });
   }
 
   redirect('/panel');

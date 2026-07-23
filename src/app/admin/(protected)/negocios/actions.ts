@@ -4,7 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { requireAdminSession } from '@/lib/admin/session';
-import { createPlatformBusiness, setPlatformBusinessActive, type NewBusinessInput } from '@/lib/admin/platform-business-service';
+import {
+  createPlatformBusiness,
+  setPlatformBusinessActive,
+  resendOwnerInvitation,
+  type NewBusinessInput,
+} from '@/lib/admin/platform-business-service';
 import { getOwnerInviter } from '@/lib/admin/owner-inviter';
 import { sendOwnerInvitationEmail } from '@/lib/email/owner-invitation';
 import { getEmailSender } from '@/lib/email/get-email-sender';
@@ -59,4 +64,25 @@ export async function setBusinessActiveAction(businessId: string, active: boolea
   if (!result.ok) {
     redirect('/admin/negocios?aviso=accion-no-aplicada');
   }
+}
+
+// Reenvía la invitación (nuevo hashed_token + email) al dueño de un negocio
+// que todavía no ha completado su alta (ver resendOwnerInvitation). Igual
+// que setBusinessActiveAction, es un botón suelto sin campos que perder:
+// sigue el patrón `?aviso=`.
+export async function resendOwnerInvitationAction(businessId: string): Promise<void> {
+  await requireAdminSession();
+  const result = await resendOwnerInvitation(prisma, getOwnerInviter(), businessId);
+  if (!result.ok) {
+    const aviso = result.reason === 'ALREADY_COMPLETED' ? 'invitacion-ya-completada' : 'accion-no-aplicada';
+    redirect(`/admin/negocios?aviso=${aviso}`);
+  }
+
+  await sendOwnerInvitationEmail(getEmailSender(), {
+    business: { name: result.business.name, accentColor: result.business.accentColor, logoUrl: result.business.logoUrl },
+    ownerEmail: result.ownerEmail,
+    invitationUrl: `${getAppBaseUrl()}/panel/invitacion?token_hash=${result.invitationTokenHash}`,
+  });
+
+  redirect('/admin/negocios?aviso=invitacion-reenviada');
 }

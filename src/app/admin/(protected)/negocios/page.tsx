@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { requireAdminSession } from '@/lib/admin/session';
 import { prisma } from '@/lib/db';
-import { listPlatformBusinesses } from '@/lib/admin/platform-business-service';
-import { setBusinessActiveAction } from './actions';
+import { listPlatformBusinesses, getOwnerInvitationCompletionMap } from '@/lib/admin/platform-business-service';
+import { getOwnerInviter } from '@/lib/admin/owner-inviter';
+import { setBusinessActiveAction, resendOwnerInvitationAction } from './actions';
 import { CreateBusinessForm } from './CreateBusinessForm';
 
 function formatDate(date: Date): string {
@@ -10,6 +11,12 @@ function formatDate(date: Date): string {
     date
   );
 }
+
+const AVISO_MESSAGES: Record<string, string> = {
+  'accion-no-aplicada': 'Esa acción ya no se puede aplicar: el negocio cambió mientras tanto. La lista se ha actualizado.',
+  'invitacion-reenviada': 'Invitación reenviada al dueño por email.',
+  'invitacion-ya-completada': 'Ese dueño ya había completado su alta: no hacía falta reenviar la invitación.',
+};
 
 export default async function AdminNegociosPage({
   searchParams,
@@ -20,14 +27,21 @@ export default async function AdminNegociosPage({
   const { aviso, page } = await searchParams;
   const currentPage = Math.max(1, Number(page) || 1);
   const { items: businesses, hasNextPage, hasPreviousPage } = await listPlatformBusinesses(prisma, currentPage);
+  const completionMap = await getOwnerInvitationCompletionMap(
+    prisma,
+    getOwnerInviter(),
+    businesses.map((b) => b.id)
+  );
+
+  const avisoMessage = aviso ? AVISO_MESSAGES[aviso] : undefined;
 
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-semibold text-slate-900">Negocios</h1>
 
-      {aviso === 'accion-no-aplicada' && (
+      {avisoMessage && (
         <div className="flex items-center justify-between gap-3 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          <span>Esa acción ya no se puede aplicar: el negocio cambió mientras tanto. La lista se ha actualizado.</span>
+          <span>{avisoMessage}</span>
           <Link href="/admin/negocios" className="font-medium underline shrink-0">
             Cerrar
           </Link>
@@ -53,11 +67,20 @@ export default async function AdminNegociosPage({
                 <td className="px-4 py-2">{business.active ? 'Activo' : 'Suspendido'}</td>
                 <td className="px-4 py-2 text-slate-500">{formatDate(business.createdAt)}</td>
                 <td className="px-4 py-2">
-                  <form action={setBusinessActiveAction.bind(null, business.id, !business.active)}>
-                    <button type="submit" className="text-xs text-slate-500 underline">
-                      {business.active ? 'Suspender' : 'Activar'}
-                    </button>
-                  </form>
+                  <div className="flex items-center gap-3">
+                    <form action={setBusinessActiveAction.bind(null, business.id, !business.active)}>
+                      <button type="submit" className="text-xs text-slate-500 underline">
+                        {business.active ? 'Suspender' : 'Activar'}
+                      </button>
+                    </form>
+                    {completionMap.get(business.id) === false && (
+                      <form action={resendOwnerInvitationAction.bind(null, business.id)}>
+                        <button type="submit" className="text-xs text-slate-500 underline">
+                          Reenviar invitación
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
