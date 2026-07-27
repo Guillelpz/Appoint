@@ -1,4 +1,5 @@
 import type { PrismaClient, TimeOff } from '@prisma/client';
+import { getStartOfLocalDayUtc } from '../booking/timezone';
 
 export type TimeOffMutationResult =
   | { ok: true; timeOff: TimeOff }
@@ -32,6 +33,11 @@ export async function listTimeOffForEmployee(prisma: PrismaClient, businessId: s
  *
  * `input.now` es inyectable para tests (mismo patrón que `now` en
  * `createAppointment`); en producción se omite y se usa `new Date()`.
+ *
+ * START_IN_PAST se comprueba contra el comienzo del día local de hoy en
+ * Europe/Madrid (`getStartOfLocalDayUtc`), no contra el instante exacto
+ * `now`: una ausencia que ya empezó hoy (p. ej. "se ha ido enferma hoy a
+ * las 09:00" registrado a las 11:00) debe poder registrarse.
  */
 export async function createTimeOffForEmployee(
   prisma: PrismaClient,
@@ -44,7 +50,7 @@ export async function createTimeOffForEmployee(
   if (Number.isNaN(input.start.getTime()) || Number.isNaN(input.end.getTime()) || input.start >= input.end) {
     return { ok: false, reason: 'INVALID_INPUT' };
   }
-  if (input.start < now) {
+  if (input.start < getStartOfLocalDayUtc(now)) {
     return { ok: false, reason: 'START_IN_PAST' };
   }
   if (input.end.getTime() - input.start.getTime() > MAX_TIME_OFF_DURATION_MS) {

@@ -40,6 +40,16 @@ export function parseLocalWallTimeToUtc(value: string, timezone: string = BUSINE
   return fromZonedTime(value, timezone);
 }
 
+// Instante UTC que corresponde a las 00:00 del día local (en `timezone`) que
+// contiene `now`. Útil para comparar "¿esto empieza antes de hoy?" sin caer
+// en la trampa de comparar contra el instante exacto `now`: eso rechazaría
+// horas de hoy ya pasadas (p. ej. registrar a las 11:00 una ausencia que
+// empezó hoy a las 09:00), cuando el día en curso debe seguir siendo válido.
+export function getStartOfLocalDayUtc(now: Date, timezone: string = BUSINESS_TIMEZONE): Date {
+  const todayLocalDateStr = getLocalDateString(now, timezone);
+  return localMinutesToUtc(todayLocalDateStr, 0, timezone);
+}
+
 // Lunes (inicio de semana ISO) de la semana que contiene localDateStr, como
 // cadena YYYY-MM-DD. Igual que addDaysToLocalDateString, opera solo sobre el
 // calendario (sin zona horaria) porque localDateStr ya representa un día

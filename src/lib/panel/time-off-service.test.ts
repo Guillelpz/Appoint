@@ -160,6 +160,79 @@ describe('createTimeOffForEmployee — límites de fecha', () => {
   });
 });
 
+describe('createTimeOffForEmployee — START_IN_PAST usa el comienzo del día local (Europe/Madrid), no el instante exacto', () => {
+  // Usa a Carlos, no a Marta: el fixture de seedDemoBusiness crea una
+  // ausencia fija para Marta el 2026-08-15 (ver demo-business.ts). Aunque
+  // estas fechas están lejos de esa, seguimos la misma convención que el
+  // resto de este archivo para evitar sorpresas de OVERLAPPING.
+
+  it('acepta una ausencia que empieza hoy a una hora ya pasada respecto a `now` (caso real: "se ha ido enferma hoy a las 09:00" registrado a las 11:00)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    // "Ahora" son las 11:00 en Madrid (CEST, UTC+2) del 1 de agosto de 2026 -> 09:00 UTC.
+    const now = new Date('2026-08-01T09:00:00.000Z');
+    // La ausencia empieza hoy a las 09:00 en Madrid (ya pasada respecto a `now`) -> 07:00 UTC.
+    const start = new Date('2026-08-01T07:00:00.000Z');
+    const end = new Date('2026-08-01T09:30:00.000Z');
+
+    const result = await createTimeOffForEmployee(prisma, seed.business.id, seed.employees.carlos.id, {
+      start,
+      end,
+      reason: 'Baja médica',
+      now,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('sigue devolviendo START_IN_PAST si la ausencia empieza ayer', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    // "Ahora" son las 11:00 en Madrid (CEST, UTC+2) del 1 de agosto de 2026 -> 09:00 UTC.
+    const now = new Date('2026-08-01T09:00:00.000Z');
+    // Empieza el día anterior (31 de julio) a las 20:00 en Madrid -> 18:00 UTC.
+    const start = new Date('2026-07-31T18:00:00.000Z');
+    const end = new Date('2026-07-31T20:00:00.000Z');
+
+    const result = await createTimeOffForEmployee(prisma, seed.business.id, seed.employees.carlos.id, {
+      start,
+      end,
+      reason: null,
+      now,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'START_IN_PAST' });
+  });
+
+  it('en el borde de medianoche española: acepta un inicio a las 23:00 UTC del día anterior (ya es "hoy" en Madrid) y rechaza uno a las 21:59 UTC (todavía "ayer" en Madrid)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    // "Ahora" son las 10:00 en Madrid (CEST, UTC+2) del 2 de agosto de 2026 -> 08:00 UTC.
+    // El comienzo del día local de hoy (2 de agosto, 00:00 Madrid) es 2026-08-01T22:00:00Z.
+    const now = new Date('2026-08-02T08:00:00.000Z');
+
+    // 2026-08-01T23:00:00Z son las 01:00 del 2 de agosto en Madrid: ya es "hoy".
+    // Una comparación ingenua por fecha UTC (01/ago) lo confundiría con "ayer".
+    const acceptedStart = new Date('2026-08-01T23:00:00.000Z');
+    const acceptedEnd = new Date('2026-08-02T00:00:00.000Z');
+    const accepted = await createTimeOffForEmployee(prisma, seed.business.id, seed.employees.carlos.id, {
+      start: acceptedStart,
+      end: acceptedEnd,
+      reason: null,
+      now,
+    });
+    expect(accepted.ok).toBe(true);
+
+    // 2026-08-01T21:59:00Z son las 23:59 del 1 de agosto en Madrid: todavía "ayer".
+    const rejectedStart = new Date('2026-08-01T21:59:00.000Z');
+    const rejectedEnd = new Date('2026-08-01T22:30:00.000Z');
+    const rejected = await createTimeOffForEmployee(prisma, seed.business.id, seed.employees.carlos.id, {
+      start: rejectedStart,
+      end: rejectedEnd,
+      reason: null,
+      now,
+    });
+    expect(rejected).toEqual({ ok: false, reason: 'START_IN_PAST' });
+  });
+});
+
 describe('listTimeOffForEmployee', () => {
   it('devuelve las ausencias del empleado, vacío si pertenece a otro negocio', async () => {
     const seed = await seedDemoBusiness(prisma);

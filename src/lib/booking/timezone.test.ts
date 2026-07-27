@@ -5,6 +5,7 @@ import {
   addDaysToLocalDateString,
   parseLocalWallTimeToUtc,
   getWeekStartLocalDateString,
+  getStartOfLocalDayUtc,
   BUSINESS_TIMEZONE,
 } from './timezone';
 
@@ -61,5 +62,31 @@ describe('getWeekStartLocalDateString', () => {
   it('cruza correctamente un cambio de mes', () => {
     // 2026-08-01 es sábado, la semana empezó el 2026-07-27 (lunes)
     expect(getWeekStartLocalDateString('2026-08-01')).toBe('2026-07-27');
+  });
+});
+
+describe('getStartOfLocalDayUtc', () => {
+  it('devuelve la medianoche local en horario de verano (CEST, UTC+2)', () => {
+    // 2026-08-01T10:00:00Z son las 12:00 del 1 de agosto en Madrid (CEST)
+    const now = new Date('2026-08-01T10:00:00.000Z');
+    expect(getStartOfLocalDayUtc(now, BUSINESS_TIMEZONE).toISOString()).toBe('2026-07-31T22:00:00.000Z');
+  });
+
+  it('devuelve la medianoche local en horario de invierno (CET, UTC+1)', () => {
+    // 2026-01-15T10:00:00Z son las 11:00 del 15 de enero en Madrid (CET)
+    const now = new Date('2026-01-15T10:00:00.000Z');
+    expect(getStartOfLocalDayUtc(now, BUSINESS_TIMEZONE).toISOString()).toBe('2026-01-14T23:00:00.000Z');
+  });
+
+  it('distingue el día local correcto justo antes de medianoche española (CEST)', () => {
+    // 2026-08-01T21:59:00Z son las 23:59 del 1 de agosto en Madrid (CEST): sigue siendo "hoy" 1 de agosto
+    const now = new Date('2026-08-01T21:59:00.000Z');
+    expect(getStartOfLocalDayUtc(now, BUSINESS_TIMEZONE).toISOString()).toBe('2026-07-31T22:00:00.000Z');
+  });
+
+  it('distingue el día local correcto justo después de medianoche española (CEST)', () => {
+    // 2026-08-01T22:01:00Z son las 00:01 del 2 de agosto en Madrid (CEST): ya es "mañana" 2 de agosto
+    const now = new Date('2026-08-01T22:01:00.000Z');
+    expect(getStartOfLocalDayUtc(now, BUSINESS_TIMEZONE).toISOString()).toBe('2026-08-01T22:00:00.000Z');
   });
 });
