@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getOwnerInviter } from '@/lib/admin/owner-inviter';
+import { prisma } from '@/lib/db';
 
 export interface AcceptInvitationResult {
   ok: false;
@@ -61,13 +61,25 @@ export async function acceptOwnerInvitationAction(input: {
     return { ok: false, message: 'No se pudo establecer la contraseña. Inténtalo de nuevo.' };
   }
 
-  // Señal propia para que /admin/negocios sepa que ya no hace falta poder
-  // reenviar la invitación (ver owner-inviter.ts). Best-effort: si falla, no
-  // bloquea al dueño (ya tiene contraseña y sesión funcionando), solo deja
-  // el botón "Reenviar invitación" visible de más en /admin hasta que se
-  // reintente.
+  // Señal propia en Postgres (Membership.invitationCompletedAt, ver
+  // prisma/schema.prisma y owner-inviter.ts) para que /admin/negocios sepa
+  // que ya no hace falta poder reenviar la invitación. `userId` viene de
+  // `verifyData.user.id` (derivado del servidor tras verifyOtp arriba),
+  // nunca de un input del cliente. Va DESPUÉS de updateUser (el dueño ya
+  // tiene contraseña utilizable pase lo que pase aquí) y ANTES del
+  // `redirect` de abajo — el `redirect()` de Next.js lanza una excepción
+  // especial (NEXT_REDIRECT) para cortar el render; si este marcado se
+  // hiciera DENTRO del try/catch que envuelve ese redirect, el catch se
+  // tragaría esa excepción y el redirect nunca llegaría al cliente. Por eso
+  // el redirect vive fuera de este bloque. Best-effort: si el marcado
+  // falla, no bloquea al dueño (ya tiene contraseña y sesión funcionando),
+  // solo deja el botón "Reenviar invitación" visible de más en /admin hasta
+  // que se reintente.
   try {
-    await getOwnerInviter().markInvitationCompleted(verifyData.user.id);
+    await prisma.membership.updateMany({
+      where: { userId: verifyData.user.id, role: 'OWNER' },
+      data: { invitationCompletedAt: new Date() },
+    });
   } catch (error) {
     console.error('[panel] no se pudo marcar la invitación como completada', { userId: verifyData.user.id, error });
   }

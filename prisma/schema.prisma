@@ -72,11 +72,20 @@ model Business {
 }
 
 model Membership {
-  id         String         @id @default(uuid())
-  userId     String
-  businessId String
-  role       MembershipRole
-  createdAt  DateTime       @default(now())
+  id                    String         @id @default(uuid())
+  userId                String
+  businessId            String
+  role                  MembershipRole
+  // Solo tiene sentido para memberships OWNER: fuente de verdad en Postgres
+  // (no en Supabase Auth) de si el dueño invitado ya completó su alta
+  // fijando contraseña en /panel/invitacion (ver actions.ts de esa ruta).
+  // Nullable/pendiente por defecto; sin default porque el backfill de la
+  // migración que introduce esta columna marca las memberships OWNER
+  // preexistentes con su createdAt, y las nuevas (createPlatformBusiness)
+  // deben nacer pendientes. Leída por getOwnerInvitationCompletionMap en
+  // src/lib/admin/platform-business-service.ts.
+  invitationCompletedAt DateTime?
+  createdAt             DateTime       @default(now())
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 

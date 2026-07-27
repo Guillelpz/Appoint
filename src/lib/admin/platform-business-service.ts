@@ -153,13 +153,23 @@ export async function setPlatformBusinessActive(
 
 export type ResendOwnerInvitationResult =
   | { ok: true; business: Business; ownerEmail: string; invitationTokenHash: string }
-  | { ok: false; reason: 'NOT_FOUND' | 'ALREADY_COMPLETED' | 'OWNER_INVITE_FAILED' };
+  | { ok: false; reason: 'NOT_FOUND' | 'ALREADY_COMPLETED' | 'BUSINESS_INACTIVE' | 'OWNER_INVITE_FAILED' };
 
 // Recuperación manual para el caso límite documentado en CONTINUAR.md
 // (verifyOtp con éxito pero updateUser falla justo después): reutiliza
 // ownerInviter.generateInviteLink, el mismo mecanismo que el alta inicial,
-// generando un hashed_token nuevo. `getInvitationStatus` es quien decide si
-// procede (ALREADY_COMPLETED si el dueño ya fijó su contraseña).
+// generando un hashed_token nuevo. ALREADY_COMPLETED se decide leyendo
+// Membership.invitationCompletedAt en Postgres (fuente de verdad, ver
+// owner-inviter.ts), no la Admin API de Supabase.
+//
+// BUSINESS_INACTIVE (decisión del usuario): un negocio suspendido no
+// recibe reenvío. Si se permitiera, el dueño podría fijar contraseña y
+// entrar por /panel/invitacion, pero requirePanelSession le bloquearía el
+// acceso igualmente ("Este negocio está suspendido") — mismo criterio que
+// ya se aplicó a los recordatorios de 24h de un negocio suspendido (Fase
+// 6). Esta comprobación va ANTES de tocar el ownerInviter, para no generar
+// un enlace de invitación (ni gastar la llamada a la Admin API) que nunca
+// debería usarse.
 export async function resendOwnerInvitation(
   prisma: PrismaClient,
   ownerInviter: OwnerInviter,
@@ -169,46 +179,47 @@ export async function resendOwnerInvitation(
   if (!business) {
     return { ok: false, reason: 'NOT_FOUND' };
   }
+  if (!business.active) {
+    return { ok: false, reason: 'BUSINESS_INACTIVE' };
+  }
   const membership = await prisma.membership.findFirst({ where: { businessId, role: 'OWNER' } });
   if (!membership) {
     return { ok: false, reason: 'NOT_FOUND' };
   }
-  const status = await ownerInviter.getInvitationStatus(membership.userId);
-  if (!status) {
-    return { ok: false, reason: 'NOT_FOUND' };
-  }
-  if (status.completed) {
+  if (membership.invitationCompletedAt !== null) {
     return { ok: false, reason: 'ALREADY_COMPLETED' };
   }
 
+  const ownerEmail = await ownerInviter.getOwnerEmail(membership.userId);
+  if (!ownerEmail) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+
   try {
-    const invite = await ownerInviter.generateInviteLink(status.email);
-    return { ok: true, business, ownerEmail: status.email, invitationTokenHash: invite.hashedToken };
+    const invite = await ownerInviter.generateInviteLink(ownerEmail);
+    return { ok: true, business, ownerEmail, invitationTokenHash: invite.hashedToken };
   } catch (error) {
     console.error('[admin] fallo al reenviar la invitación al dueño', { businessId, error });
     return { ok: false, reason: 'OWNER_INVITE_FAILED' };
   }
 }
 
-// Si no se puede resolver el estado de un negocio (sin Membership OWNER, o
-// la Admin API no devuelve el usuario) se trata como "completada": oculta
-// el botón de reenviar en vez de mostrarlo para un caso que no se sabe
-// arreglar desde la UI (evita un botón que siempre fallaría).
-export async function getOwnerInvitationCompletionMap(
-  prisma: PrismaClient,
-  ownerInviter: OwnerInviter,
-  businessIds: string[]
-): Promise<Map<string, boolean>> {
+// Resuelve el estado "¿el dueño ya completó su alta?" en una sola consulta
+// a Postgres (Membership.invitationCompletedAt), sin tocar la Admin API de
+// Supabase — evita hasta N llamadas de red por carga de /admin/negocios
+// (ver owner-inviter.ts para el porqué completo). Fail-closed: si no se
+// puede resolver el estado de un negocio (sin Membership OWNER) se trata
+// como "completada", ocultando el botón de reenviar en vez de mostrar uno
+// que fallaría.
+export async function getOwnerInvitationCompletionMap(prisma: PrismaClient, businessIds: string[]): Promise<Map<string, boolean>> {
   const memberships = await prisma.membership.findMany({
     where: { businessId: { in: businessIds }, role: 'OWNER' },
+    select: { businessId: true, invitationCompletedAt: true },
   });
-  const entries = await Promise.all(
-    memberships.map(async (membership) => {
-      const status = await ownerInviter.getInvitationStatus(membership.userId);
-      return [membership.businessId, status?.completed ?? true] as const;
-    })
-  );
-  const map = new Map(entries);
+  const map = new Map<string, boolean>();
+  for (const membership of memberships) {
+    map.set(membership.businessId, membership.invitationCompletedAt !== null);
+  }
   for (const businessId of businessIds) {
     if (!map.has(businessId)) {
       map.set(businessId, true);

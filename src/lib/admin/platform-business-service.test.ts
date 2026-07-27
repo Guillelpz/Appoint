@@ -8,26 +8,26 @@ import {
   getOwnerInvitationCompletionMap,
   type NewBusinessInput,
 } from './platform-business-service';
-import type { OwnerInviter, OwnerInvitationLink, OwnerInvitationStatus } from './owner-inviter';
+import type { OwnerInviter, OwnerInvitationLink } from './owner-inviter';
 
+// La "completación" de la invitación ya no depende del Fake: vive en
+// Postgres (Membership.invitationCompletedAt), así que los tests la mueven
+// directamente con prisma.membership.updateMany. El Fake solo simula lo que
+// OwnerInviter todavía hace: generar enlaces y resolver el email de un
+// userId (usado exclusivamente en el reenvío).
 class FakeOwnerInviter implements OwnerInviter {
   calls: string[] = [];
-  statuses = new Map<string, OwnerInvitationStatus>();
+  emailsByUserId = new Map<string, string>();
 
   async generateInviteLink(email: string): Promise<OwnerInvitationLink> {
     this.calls.push(email);
-    return { userId: `fake-user-${email}`, hashedToken: `fake-token-${email}` };
+    const userId = `fake-user-${email}`;
+    this.emailsByUserId.set(userId, email);
+    return { userId, hashedToken: `fake-token-${email}` };
   }
 
-  async getInvitationStatus(userId: string): Promise<OwnerInvitationStatus | null> {
-    return this.statuses.get(userId) ?? null;
-  }
-
-  async markInvitationCompleted(userId: string): Promise<void> {
-    const existing = this.statuses.get(userId);
-    if (existing) {
-      this.statuses.set(userId, { ...existing, completed: true });
-    }
+  async getOwnerEmail(userId: string): Promise<string | null> {
+    return this.emailsByUserId.get(userId) ?? null;
   }
 }
 
@@ -36,11 +36,9 @@ class FailingOwnerInviter implements OwnerInviter {
     throw new Error('fallo de red simulado');
   }
 
-  async getInvitationStatus(): Promise<OwnerInvitationStatus | null> {
+  async getOwnerEmail(): Promise<string | null> {
     return null;
   }
-
-  async markInvitationCompleted(): Promise<void> {}
 }
 
 const VALID_INPUT: NewBusinessInput = {
@@ -220,7 +218,6 @@ describe('resendOwnerInvitation', () => {
     const inviter = new FakeOwnerInviter();
     const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
     if (!created.ok) throw new Error('esperaba ok:true');
-    inviter.statuses.set(created.ownerUserId, { email: VALID_INPUT.ownerEmail, completed: false });
     inviter.calls = [];
 
     const result = await resendOwnerInvitation(prisma, inviter, created.business.id);
@@ -231,11 +228,14 @@ describe('resendOwnerInvitation', () => {
     expect(inviter.calls).toEqual([VALID_INPUT.ownerEmail]);
   });
 
-  it('devuelve ALREADY_COMPLETED si el dueño ya fijó su contraseña', async () => {
+  it('devuelve ALREADY_COMPLETED si la membership ya está marcada como completada en la BD', async () => {
     const inviter = new FakeOwnerInviter();
     const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
     if (!created.ok) throw new Error('esperaba ok:true');
-    inviter.statuses.set(created.ownerUserId, { email: VALID_INPUT.ownerEmail, completed: true });
+    await prisma.membership.updateMany({
+      where: { businessId: created.business.id, role: 'OWNER' },
+      data: { invitationCompletedAt: new Date() },
+    });
 
     const result = await resendOwnerInvitation(prisma, inviter, created.business.id);
 
@@ -250,17 +250,28 @@ describe('resendOwnerInvitation', () => {
     expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
   });
 
+  it('devuelve BUSINESS_INACTIVE si el negocio está suspendido, y no llama al inviter', async () => {
+    const inviter = new FakeOwnerInviter();
+    const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
+    if (!created.ok) throw new Error('esperaba ok:true');
+    await prisma.business.update({ where: { id: created.business.id }, data: { active: false } });
+    inviter.calls = [];
+
+    const result = await resendOwnerInvitation(prisma, inviter, created.business.id);
+
+    expect(result).toEqual({ ok: false, reason: 'BUSINESS_INACTIVE' });
+    expect(inviter.calls).toHaveLength(0);
+  });
+
   it('devuelve OWNER_INVITE_FAILED si el reenvío falla', async () => {
     const inviter = new FakeOwnerInviter();
     const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
     if (!created.ok) throw new Error('esperaba ok:true');
-    inviter.statuses.set(created.ownerUserId, { email: VALID_INPUT.ownerEmail, completed: false });
     const failingInviter: OwnerInviter = {
       generateInviteLink: async () => {
         throw new Error('fallo de red simulado');
       },
-      getInvitationStatus: () => inviter.getInvitationStatus(created.ownerUserId),
-      markInvitationCompleted: async () => {},
+      getOwnerEmail: () => inviter.getOwnerEmail(created.ownerUserId),
     };
 
     const result = await resendOwnerInvitation(prisma, failingInviter, created.business.id);
@@ -270,25 +281,37 @@ describe('resendOwnerInvitation', () => {
 });
 
 describe('getOwnerInvitationCompletionMap', () => {
-  it('devuelve el estado de finalización de cada negocio por su dueño', async () => {
+  it('un negocio recién creado por createPlatformBusiness queda pendiente (false)', async () => {
     const inviter = new FakeOwnerInviter();
     const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
     if (!created.ok) throw new Error('esperaba ok:true');
-    inviter.statuses.set(created.ownerUserId, { email: VALID_INPUT.ownerEmail, completed: true });
 
-    const map = await getOwnerInvitationCompletionMap(prisma, inviter, [created.business.id]);
+    const map = await getOwnerInvitationCompletionMap(prisma, [created.business.id]);
+
+    expect(map.get(created.business.id)).toBe(false);
+  });
+
+  it('devuelve true cuando la membership OWNER tiene invitationCompletedAt', async () => {
+    const inviter = new FakeOwnerInviter();
+    const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
+    if (!created.ok) throw new Error('esperaba ok:true');
+    await prisma.membership.updateMany({
+      where: { businessId: created.business.id, role: 'OWNER' },
+      data: { invitationCompletedAt: new Date() },
+    });
+
+    const map = await getOwnerInvitationCompletionMap(prisma, [created.business.id]);
 
     expect(map.get(created.business.id)).toBe(true);
   });
 
-  it('trata como completada (oculta el botón) si no se puede resolver el estado', async () => {
-    const inviter = new FakeOwnerInviter();
-    const created = await createPlatformBusiness(prisma, inviter, VALID_INPUT);
-    if (!created.ok) throw new Error('esperaba ok:true');
-    // sin registrar el status en el fake => getInvitationStatus devuelve null
+  it('trata como completada (oculta el botón) si el negocio no tiene Membership OWNER', async () => {
+    const business = await prisma.business.create({
+      data: { slug: 'negocio-sin-membership-owner', name: 'Negocio sin membership' },
+    });
 
-    const map = await getOwnerInvitationCompletionMap(prisma, inviter, [created.business.id]);
+    const map = await getOwnerInvitationCompletionMap(prisma, [business.id]);
 
-    expect(map.get(created.business.id)).toBe(true);
+    expect(map.get(business.id)).toBe(true);
   });
 });
