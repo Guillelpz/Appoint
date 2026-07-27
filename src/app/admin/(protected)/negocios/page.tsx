@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { requireAdminSession } from '@/lib/admin/session';
 import { prisma } from '@/lib/db';
 import { listPlatformBusinesses, getOwnerInvitationCompletionMap } from '@/lib/admin/platform-business-service';
-import { getOwnerInviter } from '@/lib/admin/owner-inviter';
 import { setBusinessActiveAction, resendOwnerInvitationAction } from './actions';
 import { CreateBusinessForm } from './CreateBusinessForm';
 
@@ -16,6 +15,8 @@ const AVISO_MESSAGES: Record<string, string> = {
   'accion-no-aplicada': 'Esa acción ya no se puede aplicar: el negocio cambió mientras tanto. La lista se ha actualizado.',
   'invitacion-reenviada': 'Invitación reenviada al dueño por email.',
   'invitacion-ya-completada': 'Ese dueño ya había completado su alta: no hacía falta reenviar la invitación.',
+  'invitacion-fallida': 'No se pudo reenviar la invitación al dueño. Inténtalo de nuevo; si persiste, revisa su usuario en Supabase.',
+  'negocio-suspendido': 'Este negocio está suspendido: reactívalo antes de reenviar la invitación a su dueño.',
 };
 
 export default async function AdminNegociosPage({
@@ -30,7 +31,6 @@ export default async function AdminNegociosPage({
   const { items: businesses, hasNextPage, hasPreviousPage } = await listPlatformBusinesses(prisma, currentPage);
   const completionMap = await getOwnerInvitationCompletionMap(
     prisma,
-    getOwnerInviter(),
     businesses.map((b) => b.id)
   );
 
@@ -74,7 +74,7 @@ export default async function AdminNegociosPage({
                         {business.active ? 'Suspender' : 'Activar'}
                       </button>
                     </form>
-                    {completionMap.get(business.id) === false && (
+                    {completionMap.get(business.id) === false && business.active && (
                       <form action={resendOwnerInvitationAction.bind(null, business.id)}>
                         <button type="submit" className="text-xs text-slate-500 underline">
                           Reenviar invitación

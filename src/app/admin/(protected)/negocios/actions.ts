@@ -9,6 +9,7 @@ import {
   setPlatformBusinessActive,
   resendOwnerInvitation,
   type NewBusinessInput,
+  type ResendOwnerInvitationResult,
 } from '@/lib/admin/platform-business-service';
 import { getOwnerInviter } from '@/lib/admin/owner-inviter';
 import { sendOwnerInvitationEmail } from '@/lib/email/owner-invitation';
@@ -66,6 +67,19 @@ export async function setBusinessActiveAction(businessId: string, active: boolea
   }
 }
 
+// Mapea cada motivo de fallo de resendOwnerInvitation a un aviso propio y
+// honesto: NOT_FOUND y OWNER_INVITE_FAILED no tienen nada que ver con que
+// el negocio haya cambiado mientras tanto (ese es el caso de
+// "accion-no-aplicada"), así que no se reutiliza ese mensaje para ellos —
+// justo el escenario (Supabase rechaza el reenvío) que esta funcionalidad
+// existe para resolver merece un mensaje que lo diga.
+const RESEND_INVITATION_AVISO: Record<Exclude<ResendOwnerInvitationResult, { ok: true }>['reason'], string> = {
+  ALREADY_COMPLETED: 'invitacion-ya-completada',
+  BUSINESS_INACTIVE: 'negocio-suspendido',
+  NOT_FOUND: 'invitacion-fallida',
+  OWNER_INVITE_FAILED: 'invitacion-fallida',
+};
+
 // Reenvía la invitación (nuevo hashed_token + email) al dueño de un negocio
 // que todavía no ha completado su alta (ver resendOwnerInvitation). Igual
 // que setBusinessActiveAction, es un botón suelto sin campos que perder:
@@ -74,8 +88,7 @@ export async function resendOwnerInvitationAction(businessId: string): Promise<v
   await requireAdminSession();
   const result = await resendOwnerInvitation(prisma, getOwnerInviter(), businessId);
   if (!result.ok) {
-    const aviso = result.reason === 'ALREADY_COMPLETED' ? 'invitacion-ya-completada' : 'accion-no-aplicada';
-    redirect(`/admin/negocios?aviso=${aviso}`);
+    redirect(`/admin/negocios?aviso=${RESEND_INVITATION_AVISO[result.reason]}`);
   }
 
   await sendOwnerInvitationEmail(getEmailSender(), {
