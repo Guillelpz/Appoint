@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requirePanelSession } from '@/lib/panel/session';
 import { prisma } from '@/lib/db';
 import { listCustomersForBusiness } from '@/lib/panel/customers-service';
+import { parsePageParam } from '@/lib/pagination';
 import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
 
 export default async function ClientesPage({
@@ -11,8 +12,7 @@ export default async function ClientesPage({
 }) {
   const { businessId } = await requirePanelSession();
   const { page } = await searchParams;
-  const rawPage = Number(page);
-  const currentPage = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage) || 1) : 1;
+  const currentPage = parsePageParam(page);
   const { items: customers, hasNextPage, hasPreviousPage } = await listCustomersForBusiness(prisma, businessId, currentPage);
 
   return (

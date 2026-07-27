@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PAGE_SIZE, paginationMeta } from './pagination';
+import { PAGE_SIZE, paginationMeta, parsePageParam } from './pagination';
 
 describe('paginationMeta', () => {
   it('calcula la página 1 cuando hay más resultados de los que caben en una página', () => {
@@ -54,5 +54,47 @@ describe('paginationMeta', () => {
 
     const exacto = paginationMeta(1, PAGE_SIZE);
     expect(exacto.hasNextPage).toBe(false);
+  });
+
+  // Un número finito pero enorme pasa Number.isFinite sin problema y llegaría
+  // a Prisma como un `skip` que desborda el entero de 64 bits de Postgres,
+  // reventando la petición con una excepción no capturada. El tope lo impide
+  // sin cambiar el comportamiento de "página fuera de rango: lista vacía".
+  it('acota una página finita pero absurdamente grande para que el skip nunca desborde', () => {
+    const result = paginationMeta(1e19, PAGE_SIZE * 2);
+    expect(Number.isSafeInteger(result.safePage * PAGE_SIZE)).toBe(true);
+    expect(result.hasNextPage).toBe(false);
+  });
+});
+
+describe('parsePageParam', () => {
+  it('devuelve la página 1 si el parámetro no viene en la URL', () => {
+    expect(parsePageParam(undefined)).toBe(1);
+  });
+
+  it('devuelve la página 1 con una cadena vacía o no numérica', () => {
+    expect(parsePageParam('')).toBe(1);
+    expect(parsePageParam('abc')).toBe(1);
+  });
+
+  it('lee una página válida', () => {
+    expect(parsePageParam('3')).toBe(3);
+  });
+
+  it('sanea cero, negativos y decimales', () => {
+    expect(parsePageParam('0')).toBe(1);
+    expect(parsePageParam('-5')).toBe(1);
+    expect(parsePageParam('2.7')).toBe(2);
+  });
+
+  it('sanea notación exponencial que desbordaría el skip de Prisma', () => {
+    expect(Number.isSafeInteger(parsePageParam('1e999') * PAGE_SIZE)).toBe(true);
+    expect(Number.isSafeInteger(parsePageParam('1e19') * PAGE_SIZE)).toBe(true);
+  });
+
+  it('coincide con el saneado interno de paginationMeta para el mismo valor', () => {
+    for (const raw of ['1', '7', '0', '-2', 'abc', '1e19', '2.7']) {
+      expect(parsePageParam(raw)).toBe(paginationMeta(Number(raw), 0).safePage);
+    }
   });
 });

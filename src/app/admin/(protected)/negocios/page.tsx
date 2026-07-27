@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireAdminSession } from '@/lib/admin/session';
 import { prisma } from '@/lib/db';
 import { listPlatformBusinesses, getOwnerInvitationCompletionMap } from '@/lib/admin/platform-business-service';
+import { parsePageParam } from '@/lib/pagination';
 import { setBusinessActiveAction, resendOwnerInvitationAction } from './actions';
 import { CreateBusinessForm } from './CreateBusinessForm';
 
@@ -26,8 +27,7 @@ export default async function AdminNegociosPage({
 }) {
   await requireAdminSession();
   const { aviso, page } = await searchParams;
-  const rawPage = Number(page);
-  const currentPage = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage) || 1) : 1;
+  const currentPage = parsePageParam(page);
   const { items: businesses, hasNextPage, hasPreviousPage } = await listPlatformBusinesses(prisma, currentPage);
   const completionMap = await getOwnerInvitationCompletionMap(
     prisma,
