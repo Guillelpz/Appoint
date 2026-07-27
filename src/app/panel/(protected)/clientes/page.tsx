@@ -11,7 +11,8 @@ export default async function ClientesPage({
 }) {
   const { businessId } = await requirePanelSession();
   const { page } = await searchParams;
-  const currentPage = Math.max(1, Number(page) || 1);
+  const rawPage = Number(page);
+  const currentPage = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage) || 1) : 1;
   const { items: customers, hasNextPage, hasPreviousPage } = await listCustomersForBusiness(prisma, businessId, currentPage);
 
   return (

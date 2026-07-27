@@ -18,7 +18,7 @@ export async function listCustomersForBusiness(
     prisma.customer.findMany({
       where: { businessId },
       include: { appointments: { select: { start: true } } },
-      orderBy: { name: 'asc' },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
       skip: (safePage - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),

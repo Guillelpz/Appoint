@@ -7,7 +7,7 @@ export interface PaginatedResult<T> {
 }
 
 export function paginationMeta(page: number, totalCount: number): { safePage: number; hasNextPage: boolean; hasPreviousPage: boolean } {
-  const safePage = Math.max(1, Math.floor(page) || 1);
+  const safePage = Number.isFinite(page) ? Math.max(1, Math.floor(page) || 1) : 1;
   return {
     safePage,
     hasPreviousPage: safePage > 1,

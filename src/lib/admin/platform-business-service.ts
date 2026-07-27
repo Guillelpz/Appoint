@@ -58,7 +58,7 @@ function isValidNewBusinessInput(input: NewBusinessInput): boolean {
 export async function listPlatformBusinesses(prisma: PrismaClient, page: number = 1): Promise<PaginatedResult<PlatformBusinessSummary>> {
   const { safePage, hasNextPage, hasPreviousPage } = paginationMeta(page, await prisma.business.count());
   const businesses = await prisma.business.findMany({
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     skip: (safePage - 1) * PAGE_SIZE,
     take: PAGE_SIZE,
   });

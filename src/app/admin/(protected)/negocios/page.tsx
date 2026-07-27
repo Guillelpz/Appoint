@@ -25,7 +25,8 @@ export default async function AdminNegociosPage({
 }) {
   await requireAdminSession();
   const { aviso, page } = await searchParams;
-  const currentPage = Math.max(1, Number(page) || 1);
+  const rawPage = Number(page);
+  const currentPage = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage) || 1) : 1;
   const { items: businesses, hasNextPage, hasPreviousPage } = await listPlatformBusinesses(prisma, currentPage);
   const completionMap = await getOwnerInvitationCompletionMap(
     prisma,
