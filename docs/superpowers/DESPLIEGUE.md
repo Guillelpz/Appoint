@@ -331,4 +331,4 @@ no ningún ajuste de Supabase Auth.
   herramienta.
 - **`TEST_DATABASE_URL` no hace falta en Vercel.** Solo la usa `pnpm test`
   contra Postgres local/CI (`src/test/prisma-client.ts`,
-  `src/test/global-setup.ts`); no la lea ningún código de runtime.
+  `src/test/global-setup.ts`); no la lee ningún código de runtime.
