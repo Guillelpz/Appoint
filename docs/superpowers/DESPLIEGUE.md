@@ -57,6 +57,47 @@ enviado y viendo que el enlace no funciona, momento en el que ya se ha
 mandado con la URL rota. **Configúrala antes del primer deploy, no
 después.**
 
+### ⚠️ Aviso: tu `.env` local NO debe llevar credenciales de producción
+
+Es tentador pegar las cadenas de producción en el `.env` local para "probar
+contra lo real". No lo hagas: los valores de producción viven en el dashboard
+de Vercel, que es de donde los lee la app desplegada. El `.env` local es para
+el stack de Docker (`pnpm exec supabase start`), y sus valores válidos están
+en `.env.example`.
+
+Con producción en el `.env` local, estos comandos apuntan a producción sin
+avisar (`prisma.config.ts` carga `.env` con dotenv y de ahí saca
+`DATABASE_URL`):
+
+| Comando | Qué pasaría |
+|---|---|
+| `pnpm dev` | Cada prueba que hagas en localhost escribe en la BD real. |
+| `pnpm db:migrate` (`prisma migrate dev`) | Si detecta divergencia con el historial de migraciones, **ofrece resetear la base de datos**, es decir, borrarla. |
+| `pnpm db:seed` | Crea el negocio demo y el **super-admin demo, cuya contraseña está en `.env.example`, que sí está versionado**. |
+
+**Ocurrió de verdad (2026-07-31).** Con el `.env` configurado para la Fase A,
+una ejecución de `pnpm exec playwright test` dio de alta las dos cuentas demo
+en el proyecto Supabase de producción. La base de datos se salvó porque
+`e2e/global-setup.ts` fuerza `TEST_DATABASE_URL`, pero las cuentas de Supabase
+Auth se crean por la Admin API, que lee `NEXT_PUBLIC_SUPABASE_URL` del `.env`
+(`src/lib/supabase/admin.ts`) y no tenía ninguna protección equivalente.
+Las cuentas se borraron y las dos suites **abortan** ahora si su destino no es
+localhost, mediante la guardia compartida `src/test/assert-destino-local.ts`:
+`pnpm exec playwright test` comprueba `TEST_DATABASE_URL` y
+`NEXT_PUBLIC_SUPABASE_URL`, y `pnpm test` comprueba `TEST_DATABASE_URL` (no
+toca Auth, pero `src/test/setup.ts` hace `TRUNCATE` de todas las tablas antes
+de cada test, así que el riesgo para la base de datos es el mismo).
+
+**Para aplicar migraciones a producción desde tu máquina** no hace falta tocar
+el `.env`: dotenv no pisa las variables que ya existen en el entorno, así que
+basta con definirlas para ese único comando y cerrar la terminal después.
+
+```powershell
+$env:DATABASE_URL="<cadena del pooler, puerto 6543>"
+$env:DIRECT_URL="<cadena directa, puerto 5432>"
+pnpm db:deploy
+```
+
 ## 3. Pasos de la Fase A
 
 Cada paso indica quién lo ejecuta: `[Guille, navegador]`, `[Guille,
