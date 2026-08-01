@@ -14,7 +14,7 @@ Optimización de latencia, **sin mergear a `main`**. No nació de un plan de `pl
   - Índices nuevos en `Appointment` (migración `add_appointment_performance_indexes`): `(businessId, start)`, `(businessId, customerPhone)`, `(businessId, customerEmail)`, `(status, start)`; se retira `(businessId)` a secas por redundante.
 - **`3222c1f` — `test:`** dos arreglos de infraestructura, salidos de la revisión de la rama (ver "Avisos técnicos" abajo).
 
-**Verificación de la rama**: 403/403 Vitest (52 archivos) + `pnpm lint` + `pnpm exec tsc --noEmit` + 3/3 Playwright. Falta `pnpm build` antes de mergear.
+**Verificación de la rama**: 403/403 Vitest (52 archivos) + `pnpm lint` + `pnpm exec tsc --noEmit` + `pnpm build` + 3/3 Playwright. Todos los gates en verde; la rama está lista para mergear cuando el usuario lo decida.
 
 ## Estado actual
 
@@ -66,7 +66,7 @@ El fix de seguridad de la Fase 6 en `/panel/invitacion` sigue intacto y fue re-v
 
 Las Fases 1-6 completan el alcance funcional planificado del producto, y la limpieza de minors está cerrada.
 
-1. **Decidir el merge de `perf/optimizacion-latencia`** (ver su sección arriba): está verde en test/lint/tsc/Playwright y revisada, pero le falta pasar `pnpm build`.
+1. **Decidir el merge de `perf/optimizacion-latencia`** (ver su sección arriba): revisada y con todos los gates en verde, esperando solo la decisión del usuario.
 2. **Despliegue real** — el hito elegido por el usuario, con `DESPLIEGUE.md` como documento de trabajo (su sección "Estado del despliegue" dice en qué paso se está). Fase A empezada.
 3. **`LANZAMIENTO.md`** (creado 2026-07-31, borrador): roadmap comercial de "la app funciona" a "hay peluquerías pagando". Su Bloque 0 marca tres agujeros abiertos **hoy** que no deberían esperar al final del desarrollo: Resend sin dominio verificado (ninguna clienta puede recibir un email), recordatorios de 24 h apagados desde que se borró `vercel.json` (`816d939`, límite de cron del plan Hobby) y sin copias de seguridad (Supabase Free no las hace).
 
