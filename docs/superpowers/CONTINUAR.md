@@ -48,6 +48,13 @@ Plan: `docs/superpowers/plans/2026-07-23-limpieza-minors.md` (5 tareas). Cierra 
 
 El fix de seguridad de la Fase 6 en `/panel/invitacion` sigue intacto y fue re-verificado en la revisión: `verifyOtp` se ejecuta SIEMPRE antes de `updateUser`, el `userId` que se marca viene de `verifyData.user.id` (derivado del servidor, nunca del input), y el `try/catch` best-effort del marcado no envuelve al `redirect()` (si lo hiciera, se tragaría el `NEXT_REDIRECT` de Next.js y rompería el flujo en silencio).
 
+## Ramas sin mergear (2026-08-01)
+
+- **`worktree-rediseno-login`** (worktree en `.claude/worktrees/rediseno-login`, **sin mergear**): rediseño visual de `/panel/login` y `/admin/login`, extrayendo el componente compartido `src/components/LoginCard.tsx`. Spec en `docs/superpowers/specs/2026-08-01-rediseno-login-design.md`, plan en `docs/superpowers/plans/2026-08-01-rediseno-login.md`.
+  - **Mergear en squash**: el commit intermedio `de87ecb` no compila (borró `SubmitButton.tsx` mientras `LoginCard.tsx` todavía lo importaba; `0483f13` lo repara). Squashear deja fuera de `main` y de `git bisect` un commit roto.
+- **`perf/optimizacion-latencia`** (rama actual del checkout principal, **sin mergear y con cambios sin commitear**, ~35 archivos): optimización de latencia en curso.
+- **El orden de merge importa**: el árbol sin commitear de `perf/optimizacion-latencia` reescribe los mismos dos archivos de login (`/panel/login` y `/admin/login`) para cambiar el botón plano por un `SubmitButton` con estado de carga "Entrando…". Si el rediseño de login se mergea primero, ese cambio de dos archivos se reduce a una edición de tres líneas dentro de `LoginCard.tsx`, y las dos zonas ganan el estado de carga a la vez. Si `perf/optimizacion-latencia` se mergea primero, ambos archivos entran en conflicto de hunk completo con el rediseño.
+
 ## Siguiente paso inmediato
 
 Las Fases 1-6 completan el alcance funcional planificado del producto, y la limpieza de minors está cerrada. Lo único explícitamente pendiente es el **despliegue real** (ver "Después de la Fase 6"), que es lo que el usuario ha elegido como siguiente hito.
