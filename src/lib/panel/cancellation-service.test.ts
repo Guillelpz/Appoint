@@ -4,6 +4,7 @@ import { seedDemoBusiness } from '../seed/demo-business';
 import { createAppointment } from '@/lib/booking/create-appointment';
 import { cancelAppointmentFromPanel } from './cancellation-service';
 import { FakeEmailSender } from '../../test/fake-email-sender';
+import { FakeDeferredTaskRunner, RecordingDeferredTaskRunner } from '../../test/fake-deferred-task-runner';
 
 const NOW = new Date('2026-07-13T08:00:00.000Z');
 const VALID_START = new Date('2026-07-14T08:00:00.000Z');
@@ -37,6 +38,7 @@ describe('cancelAppointmentFromPanel', () => {
       businessId: seed.business.id,
       appointmentId: appointment.id,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -56,6 +58,7 @@ describe('cancelAppointmentFromPanel', () => {
       businessId: otherBusiness.id,
       appointmentId: appointment.id,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
@@ -71,6 +74,7 @@ describe('cancelAppointmentFromPanel', () => {
       businessId: seed.business.id,
       appointmentId: appointment.id,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
@@ -81,11 +85,32 @@ describe('cancelAppointmentFromPanel', () => {
     const emailSender = new FakeEmailSender();
 
     const [first, second] = await Promise.all([
-      cancelAppointmentFromPanel(prisma, { businessId: seed.business.id, appointmentId: appointment.id, emailSender }),
-      cancelAppointmentFromPanel(prisma, { businessId: seed.business.id, appointmentId: appointment.id, emailSender }),
+      cancelAppointmentFromPanel(prisma, { businessId: seed.business.id, appointmentId: appointment.id, emailSender, taskScheduler: new FakeDeferredTaskRunner() }),
+      cancelAppointmentFromPanel(prisma, { businessId: seed.business.id, appointmentId: appointment.id, emailSender, taskScheduler: new FakeDeferredTaskRunner() }),
     ]);
 
     expect([first, second].filter((r) => r.ok)).toHaveLength(1);
+    expect(emailSender.sent).toHaveLength(1);
+  });
+
+  it('devuelve el resultado antes de que el email se haya enviado (envío diferido con after())', async () => {
+    const { seed, appointment } = await createTestAppointment({ customerEmail: 'panel-cancel-diferido@example.com' });
+    const emailSender = new FakeEmailSender();
+    const taskScheduler = new RecordingDeferredTaskRunner();
+
+    const result = await cancelAppointmentFromPanel(prisma, {
+      businessId: seed.business.id,
+      appointmentId: appointment.id,
+      emailSender,
+      taskScheduler,
+    });
+
+    expect(result.ok).toBe(true);
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.status).toBe('CANCELLED');
+    expect(emailSender.sent).toHaveLength(0);
+
+    await taskScheduler.flush();
     expect(emailSender.sent).toHaveLength(1);
   });
 });

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { SubmitButton } from '@/components/SubmitButton';
 import { requirePanelSession } from '@/lib/panel/session';
 import { prisma } from '@/lib/db';
 import { getEmployeeForBusiness } from '@/lib/panel/employees-service';
@@ -28,13 +29,15 @@ export default async function EmployeeDetailPage({
   const { businessId } = await requirePanelSession();
   const { id } = await params;
   const { aviso } = await searchParams;
-  const employee = await getEmployeeForBusiness(prisma, businessId, id);
+  const [employee, services] = await Promise.all([
+    getEmployeeForBusiness(prisma, businessId, id),
+    listServicesForBusiness(prisma, businessId),
+  ]);
 
   if (!employee) {
     notFound();
   }
 
-  const services = await listServicesForBusiness(prisma, businessId);
   const activeServices = services.filter((service) => service.active);
   const employeeServiceIds = employee.services.map((s) => s.serviceId);
 
@@ -76,9 +79,9 @@ export default async function EmployeeDetailPage({
                 {t.reason ? ` · ${t.reason}` : ''}
               </span>
               <form action={deleteTimeOffAction.bind(null, employee.id, t.id)}>
-                <button type="submit" className="text-xs text-red-600 underline">
+                <SubmitButton pendingLabel="Eliminando…" className="text-xs text-red-600 underline">
                   Eliminar
-                </button>
+                </SubmitButton>
               </form>
             </li>
           ))}
@@ -98,9 +101,9 @@ export default async function EmployeeDetailPage({
             Motivo
             <input type="text" name="reason" className="mt-1 block rounded border border-slate-300 px-2 py-1" />
           </label>
-          <button type="submit" className="rounded bg-slate-900 px-3 py-1.5 text-white">
+          <SubmitButton pendingLabel="Añadiendo…" className="rounded bg-slate-900 px-3 py-1.5 text-white">
             Añadir ausencia
-          </button>
+          </SubmitButton>
         </form>
       </section>
     </div>

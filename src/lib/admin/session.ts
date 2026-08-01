@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/db';
@@ -17,7 +18,15 @@ export interface AdminSession {
 // Tarea 6) — mismo patrón que requirePanelSession() en
 // src/lib/panel/session.ts, pero resolviendo el rol vía PlatformAdmin en
 // vez de Membership OWNER.
-export async function requireAdminSession(): Promise<AdminSession> {
+//
+// Envuelta en cache() de React por el mismo motivo que requirePanelSession():
+// memoiza por render de servidor (no entre peticiones ni entre usuarios), así
+// que layout + página + Server Actions de /admin/** dentro de la misma
+// petición comparten una única resolución de sesión. Aquí solo hay una
+// consulta a Postgres (isPlatformAdmin), así que no hay nada que fusionar —
+// cache() ya elimina las repeticiones de la llamada a Supabase Auth y de esa
+// única consulta.
+export const requireAdminSession = cache(async (): Promise<AdminSession> => {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -33,4 +42,4 @@ export async function requireAdminSession(): Promise<AdminSession> {
   }
 
   return { userId: user.id, email: user.email ?? '' };
-}
+});

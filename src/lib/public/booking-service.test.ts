@@ -4,6 +4,7 @@ import { seedDemoBusiness } from '../seed/demo-business';
 import { bookAppointmentBySlug } from './booking-service';
 import { INVALID_INPUT_MESSAGE } from './error-messages';
 import { FakeEmailSender } from '../../test/fake-email-sender';
+import { FakeDeferredTaskRunner, RecordingDeferredTaskRunner } from '../../test/fake-deferred-task-runner';
 
 const NOW = new Date('2026-07-13T08:00:00.000Z');
 const VALID_START = new Date('2026-07-14T08:00:00.000Z');
@@ -24,6 +25,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.60',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -50,6 +52,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.61',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -73,6 +76,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.70',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -97,6 +101,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.71',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -124,6 +129,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.72',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(emailSender.sent).toHaveLength(0);
@@ -144,6 +150,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.73',
       now: NOW,
       emailSender: failingSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -167,6 +174,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.62',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({
@@ -192,6 +200,7 @@ describe('bookAppointmentBySlug', () => {
         ipAddress: '198.51.100.63',
         now: NOW,
         emailSender: new FakeEmailSender(),
+        taskScheduler: new FakeDeferredTaskRunner(),
       });
 
     const [resultA, resultB] = await Promise.all([
@@ -235,6 +244,36 @@ describe('bookAppointmentBySlug', () => {
     }
   });
 
+  it('devuelve el resultado antes de que los emails se hayan enviado, incluso con manualApproval (dos envíos diferidos)', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    await prisma.business.update({ where: { id: seed.business.id }, data: { manualApproval: true } });
+    const emailSender = new FakeEmailSender();
+    const taskScheduler = new RecordingDeferredTaskRunner();
+
+    const result = await bookAppointmentBySlug(prisma, {
+      slug: 'salon-aura',
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente diferido',
+      customerPhone: '+34699000030',
+      customerEmail: 'diferido@example.com',
+      ipAddress: '198.51.100.80',
+      now: NOW,
+      emailSender,
+      taskScheduler,
+    });
+
+    expect(result.ok).toBe(true);
+    // La reserva ya ha tenido éxito, pero ninguno de los dos emails
+    // (solicitud pendiente al cliente + aviso al negocio) ha salido todavía:
+    // ambos se han programado con taskScheduler.run(), no con await directo.
+    expect(emailSender.sent).toHaveLength(0);
+
+    await taskScheduler.flush();
+    expect(emailSender.sent).toHaveLength(2);
+  });
+
   it('devuelve el mensaje de BUSINESS_NOT_FOUND si el slug no existe', async () => {
     const seed = await seedDemoBusiness(prisma);
     const emailSender = new FakeEmailSender();
@@ -250,6 +289,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.64',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({
@@ -275,6 +315,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.65',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({
@@ -302,6 +343,7 @@ describe('bookAppointmentBySlug', () => {
       ipAddress: '198.51.100.66',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);

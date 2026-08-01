@@ -40,18 +40,26 @@ export async function assignAnyAvailableEmployee(
   const dayStart = localMinutesToUtc(localDate, 0);
   const dayEnd = localMinutesToUtc(addDaysToLocalDateString(localDate, 1), 0);
 
-  const loads = await Promise.all(
-    availableEmployeeIds.map(async (employeeId) => {
-      const count = await prisma.appointment.count({
-        where: {
-          employeeId,
-          start: { gte: dayStart, lt: dayEnd },
-          ...activeAppointmentWhere(now),
-        },
-      });
-      return { employeeId, count };
-    })
-  );
+  // Antes: un count() por empleado disponible (N consultas). Ahora: un único
+  // groupBy con `in` que cuenta todos a la vez; los empleados sin ninguna
+  // cita ese día no aparecen en el resultado y se tratan como count 0 (mismo
+  // comportamiento que antes, donde count() devolvía 0 para ellos).
+  const counts = await prisma.appointment.groupBy({
+    by: ['employeeId'],
+    where: {
+      employeeId: { in: availableEmployeeIds },
+      start: { gte: dayStart, lt: dayEnd },
+      ...activeAppointmentWhere(now),
+    },
+    _count: { _all: true },
+  });
+
+  const countByEmployeeId = new Map(counts.map((c) => [c.employeeId, c._count._all]));
+
+  const loads = availableEmployeeIds.map((employeeId) => ({
+    employeeId,
+    count: countByEmployeeId.get(employeeId) ?? 0,
+  }));
 
   loads.sort((a, b) => a.count - b.count || a.employeeId.localeCompare(b.employeeId));
 

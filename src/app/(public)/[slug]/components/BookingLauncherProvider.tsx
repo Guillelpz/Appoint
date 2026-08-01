@@ -1,8 +1,17 @@
 'use client';
 
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { BookingSheet } from './booking-sheet/BookingSheet';
+import dynamic from 'next/dynamic';
 import type { StepEmployeeOption } from './booking-sheet/StepEmployee';
+
+// Carga bajo demanda: GSAP y @gsap/react (importados por BookingSheet) solo
+// entran en el bundle cuando el visitante pulsa "Reservar", no en cada carga
+// de la página pública. `ssr: false` porque la hoja es un overlay interactivo
+// sin sentido en el HTML inicial; su propia animación de apertura (useGSAP)
+// corre igual al montarse tras cargar el chunk.
+const BookingSheet = dynamic(() => import('./booking-sheet/BookingSheet').then((mod) => mod.BookingSheet), {
+  ssr: false,
+});
 
 interface BookingLauncherContextValue {
   openService: (serviceId: string) => void;

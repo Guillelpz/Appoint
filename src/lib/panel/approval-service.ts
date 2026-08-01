@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
-import { getEmailSender } from '@/lib/email/get-email-sender';
-import type { EmailSender } from '@/lib/email/types';
+import { getEmailSender, getDeferredTaskRunner } from '@/lib/email/get-email-sender';
+import type { DeferredTaskRunner, EmailSender } from '@/lib/email/types';
 import { sendAppointmentApprovedEmail, sendAppointmentRejectedEmail } from '@/lib/email/appointment-notifications';
 
 export type ApprovalFailureReason = 'NOT_FOUND';
@@ -10,6 +10,7 @@ export interface ApprovePendingAppointmentInput {
   businessId: string;
   appointmentId: string;
   emailSender?: EmailSender;
+  taskScheduler?: DeferredTaskRunner;
 }
 
 // Claim atómico: solo transiciona si la cita sigue businessId+PENDING en el
@@ -38,12 +39,17 @@ export async function approvePendingAppointment(
 
   if (withRelations) {
     const emailSender = input.emailSender ?? getEmailSender();
-    await sendAppointmentApprovedEmail(emailSender, {
-      appointment: withRelations,
-      service: withRelations.service,
-      employee: withRelations.employee,
-      business: withRelations.business,
-    });
+    const taskScheduler = input.taskScheduler ?? getDeferredTaskRunner();
+    // Diferido con after(): el email no debe bloquear la respuesta al panel
+    // (ver DeferredTaskRunner en src/lib/email/types.ts).
+    taskScheduler.run(() =>
+      sendAppointmentApprovedEmail(emailSender, {
+        appointment: withRelations,
+        service: withRelations.service,
+        employee: withRelations.employee,
+        business: withRelations.business,
+      })
+    );
   }
 
   return { ok: true };
@@ -53,6 +59,7 @@ export interface RejectPendingAppointmentInput {
   businessId: string;
   appointmentId: string;
   emailSender?: EmailSender;
+  taskScheduler?: DeferredTaskRunner;
 }
 
 export async function rejectPendingAppointment(
@@ -75,12 +82,15 @@ export async function rejectPendingAppointment(
 
   if (withRelations) {
     const emailSender = input.emailSender ?? getEmailSender();
-    await sendAppointmentRejectedEmail(emailSender, {
-      appointment: withRelations,
-      service: withRelations.service,
-      employee: withRelations.employee,
-      business: withRelations.business,
-    });
+    const taskScheduler = input.taskScheduler ?? getDeferredTaskRunner();
+    taskScheduler.run(() =>
+      sendAppointmentRejectedEmail(emailSender, {
+        appointment: withRelations,
+        service: withRelations.service,
+        employee: withRelations.employee,
+        business: withRelations.business,
+      })
+    );
   }
 
   return { ok: true };

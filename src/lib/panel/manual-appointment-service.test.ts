@@ -3,6 +3,7 @@ import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
 import { createManualAppointmentForBusiness } from './manual-appointment-service';
 import { FakeEmailSender } from '../../test/fake-email-sender';
+import { FakeDeferredTaskRunner, RecordingDeferredTaskRunner } from '../../test/fake-deferred-task-runner';
 
 const NOW = new Date('2026-07-13T08:00:00.000Z');
 // Martes: dentro del horario laboral de Marta en el seed (10:00-14:00 y 16:00-20:00 hora de Madrid).
@@ -21,6 +22,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: 'Cliente manual sin contacto',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -46,11 +48,39 @@ describe('createManualAppointmentForBusiness', () => {
       customerEmail: 'manual@example.com',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
     expect(emailSender.sent).toHaveLength(1);
     expect(emailSender.sent[0].to).toBe('manual@example.com');
+  });
+
+  it('devuelve la cita creada antes de que el email se haya enviado (envío diferido con after())', async () => {
+    const seed = await seedDemoBusiness(prisma);
+    const emailSender = new FakeEmailSender();
+    const taskScheduler = new RecordingDeferredTaskRunner();
+
+    const result = await createManualAppointmentForBusiness(prisma, {
+      businessId: seed.business.id,
+      serviceId: seed.services.corteHombre.id,
+      employeeId: seed.employees.marta.id,
+      start: VALID_START,
+      customerName: 'Cliente manual diferido',
+      customerEmail: 'manual-diferido@example.com',
+      now: NOW,
+      emailSender,
+      taskScheduler,
+    });
+
+    expect(result.ok).toBe(true);
+    // La cita ya existe en BD, pero el email de aprobación todavía no ha
+    // salido: se ha programado con taskScheduler.run(), no esperado inline.
+    expect(emailSender.sent).toHaveLength(0);
+
+    await taskScheduler.flush();
+    expect(emailSender.sent).toHaveLength(1);
+    expect(emailSender.sent[0].to).toBe('manual-diferido@example.com');
   });
 
   it('omite el anti-fraude: permite una tercera cita activa para el mismo teléfono en el mismo negocio', async () => {
@@ -67,6 +97,7 @@ describe('createManualAppointmentForBusiness', () => {
         customerPhone: phone,
         now: NOW,
         emailSender: new FakeEmailSender(),
+        taskScheduler: new FakeDeferredTaskRunner(),
       });
       expect(result.ok).toBe(true);
     }
@@ -83,6 +114,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerPhone: phone,
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
     expect(third.ok).toBe(true);
   });
@@ -99,6 +131,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerEmail: email,
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     const second = await createManualAppointmentForBusiness(prisma, {
@@ -110,6 +143,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerEmail: email,
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(second.ok).toBe(true);
@@ -130,6 +164,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerPhone: phone,
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
     expect(first.ok).toBe(true);
 
@@ -142,6 +177,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerPhone: phone,
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(second.ok).toBe(true);
@@ -178,6 +214,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerEmail: 'otro-email-manual@example.com',
       now: NOW,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'CUSTOMER_CONFLICT' });
@@ -198,6 +235,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: '   ',
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'INVALID_INPUT' });
@@ -214,6 +252,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: 'Cliente sin hueco',
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
@@ -236,6 +275,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: 'Servicio ajeno',
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'SERVICE_NOT_FOUND' });
@@ -256,6 +296,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: 'Servicio desactivado',
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'SERVICE_NOT_FOUND' });
@@ -289,6 +330,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: 'Empleado ajeno',
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
@@ -309,6 +351,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: 'Cliente fuera de horario',
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
@@ -324,6 +367,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: 'Primer cliente',
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
     expect(first.ok).toBe(true);
 
@@ -342,6 +386,7 @@ describe('createManualAppointmentForBusiness', () => {
       customerName: 'Segundo cliente',
       now: NOW,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
     expect(second).toEqual({ ok: false, reason: 'EMPLOYEE_UNAVAILABLE' });
   });
@@ -359,6 +404,7 @@ describe('createManualAppointmentForBusiness', () => {
         customerName,
         now: NOW,
         emailSender: new FakeEmailSender(),
+        taskScheduler: new FakeDeferredTaskRunner(),
       });
 
     const [resultA, resultB] = await Promise.all([attempt('Cliente carrera A'), attempt('Cliente carrera B')]);

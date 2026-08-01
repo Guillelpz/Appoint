@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { SubmitButton } from '@/components/SubmitButton';
 import { requirePanelSession } from '@/lib/panel/session';
 import { prisma } from '@/lib/db';
 import { getCustomerDetail } from '@/lib/panel/customers-service';
@@ -43,16 +44,16 @@ export default async function CustomerDetailPage({
         <h1 className="text-xl font-semibold text-slate-900">{customer.name}</h1>
         {customer.blacklisted ? (
           <form action={removeFromBlacklistAction.bind(null, customer.id)}>
-            <button type="submit" className="rounded border border-slate-300 px-3 py-1.5 text-sm">
+            <SubmitButton pendingLabel="Quitando…" className="rounded border border-slate-300 px-3 py-1.5 text-sm">
               Quitar de la lista negra
-            </button>
+            </SubmitButton>
           </form>
         ) : (
           <form action={addToBlacklistAction.bind(null, customer.id)} className="flex items-center gap-2">
             <input type="text" name="reason" placeholder="Motivo (opcional)" className="rounded border border-slate-300 px-2 py-1 text-sm" />
-            <button type="submit" className="rounded bg-red-600 px-3 py-1.5 text-sm text-white">
+            <SubmitButton pendingLabel="Bloqueando…" className="rounded bg-red-600 px-3 py-1.5 text-sm text-white">
               Bloquear
-            </button>
+            </SubmitButton>
           </form>
         )}
       </div>

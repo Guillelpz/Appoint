@@ -4,8 +4,8 @@ import { getLocalDateString } from '@/lib/booking/timezone';
 import { getBookingErrorMessage, INVALID_INPUT_MESSAGE } from './error-messages';
 import { getAvailableSlotsForBusiness } from './slots-service';
 import { validateBookingInput } from './validate-booking-input';
-import { getEmailSender } from '@/lib/email/get-email-sender';
-import type { EmailSender } from '@/lib/email/types';
+import { getEmailSender, getDeferredTaskRunner } from '@/lib/email/get-email-sender';
+import type { DeferredTaskRunner, EmailSender } from '@/lib/email/types';
 import {
   sendBookingConfirmationEmail,
   sendBookingPendingApprovalEmail,
@@ -23,6 +23,7 @@ export interface BookAppointmentBySlugInput {
   ipAddress: string;
   now?: Date;
   emailSender?: EmailSender;
+  taskScheduler?: DeferredTaskRunner;
 }
 
 export type BookAppointmentBySlugResult =
@@ -35,6 +36,7 @@ export async function bookAppointmentBySlug(
 ): Promise<BookAppointmentBySlugResult> {
   const now = input.now ?? new Date();
   const emailSender = input.emailSender ?? getEmailSender();
+  const taskScheduler = input.taskScheduler ?? getDeferredTaskRunner();
 
   const validation = validateBookingInput({
     customerName: input.customerName,
@@ -82,11 +84,15 @@ export async function bookAppointmentBySlug(
         business,
       };
 
+      // Diferido con taskScheduler (after() por defecto): ninguno de estos
+      // envíos debe bloquear la respuesta al cliente que acaba de reservar.
+      // Con manualApproval son dos envíos independientes (cliente + negocio):
+      // antes se esperaban en serie con await; ahora se programan los dos.
       if (business.manualApproval) {
-        await sendBookingPendingApprovalEmail(emailSender, ctx);
-        await sendNewPendingRequestEmail(emailSender, ctx);
+        taskScheduler.run(() => sendBookingPendingApprovalEmail(emailSender, ctx));
+        taskScheduler.run(() => sendNewPendingRequestEmail(emailSender, ctx));
       } else {
-        await sendBookingConfirmationEmail(emailSender, ctx);
+        taskScheduler.run(() => sendBookingConfirmationEmail(emailSender, ctx));
       }
     }
 

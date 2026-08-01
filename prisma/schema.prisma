@@ -211,9 +211,12 @@ model Appointment {
   employee Employee @relation(fields: [employeeId], references: [id])
   customer Customer @relation(fields: [customerId], references: [id])
 
-  @@index([businessId])
   @@index([employeeId, start])
   @@index([customerId])
+  @@index([businessId, start])
+  @@index([businessId, customerPhone])
+  @@index([businessId, customerEmail])
+  @@index([status, start])
 }
 
 model Customer {

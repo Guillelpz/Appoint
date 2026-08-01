@@ -1,4 +1,5 @@
 import { signInAction } from './actions';
+import { SubmitButton } from '@/components/SubmitButton';
 
 export default async function PanelLoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
@@ -31,9 +32,12 @@ export default async function PanelLoginPage({ searchParams }: { searchParams: P
             className="mt-1 block w-full rounded border border-slate-300 px-3 py-2"
           />
         </label>
-        <button type="submit" className="w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white">
+        <SubmitButton
+          pendingLabel="Entrando…"
+          className="w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+        >
           Entrar
-        </button>
+        </SubmitButton>
       </form>
     </main>
   );

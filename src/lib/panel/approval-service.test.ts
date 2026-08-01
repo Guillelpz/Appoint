@@ -3,6 +3,7 @@ import { prisma } from '../../test/prisma-client';
 import { seedDemoBusiness } from '../seed/demo-business';
 import { approvePendingAppointment, rejectPendingAppointment } from './approval-service';
 import { FakeEmailSender } from '../../test/fake-email-sender';
+import { FakeDeferredTaskRunner, RecordingDeferredTaskRunner } from '../../test/fake-deferred-task-runner';
 
 async function createPendingAppointment(
   overrides: { customerEmail?: string | null; emailVerifiedAt?: Date | null } = {}
@@ -45,6 +46,7 @@ describe('approvePendingAppointment', () => {
       businessId: seed.business.id,
       appointmentId: appointment.id,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -61,6 +63,7 @@ describe('approvePendingAppointment', () => {
       businessId: seed.business.id,
       appointmentId: appointment.id,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -76,6 +79,7 @@ describe('approvePendingAppointment', () => {
       businessId: seed.business.id,
       appointmentId: appointment.id,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -92,6 +96,7 @@ describe('approvePendingAppointment', () => {
       businessId: otherBusiness.id,
       appointmentId: appointment.id,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });
@@ -104,8 +109,8 @@ describe('approvePendingAppointment', () => {
     const emailSender = new FakeEmailSender();
 
     const [first, second] = await Promise.all([
-      approvePendingAppointment(prisma, { businessId: seed.business.id, appointmentId: appointment.id, emailSender }),
-      approvePendingAppointment(prisma, { businessId: seed.business.id, appointmentId: appointment.id, emailSender }),
+      approvePendingAppointment(prisma, { businessId: seed.business.id, appointmentId: appointment.id, emailSender, taskScheduler: new FakeDeferredTaskRunner() }),
+      approvePendingAppointment(prisma, { businessId: seed.business.id, appointmentId: appointment.id, emailSender, taskScheduler: new FakeDeferredTaskRunner() }),
     ]);
 
     // A diferencia de la cancelación pública, aprobar no es idempotente para
@@ -119,6 +124,33 @@ describe('approvePendingAppointment', () => {
   });
 });
 
+describe('approvePendingAppointment — envío diferido', () => {
+  it('confirma la cita y devuelve el resultado antes de que el email se haya enviado (after() no bloquea la respuesta)', async () => {
+    const { seed, appointment } = await createPendingAppointment();
+    const emailSender = new FakeEmailSender();
+    const taskScheduler = new RecordingDeferredTaskRunner();
+
+    const result = await approvePendingAppointment(prisma, {
+      businessId: seed.business.id,
+      appointmentId: appointment.id,
+      emailSender,
+      taskScheduler,
+    });
+
+    expect(result.ok).toBe(true);
+    const refreshed = await prisma.appointment.findUniqueOrThrow({ where: { id: appointment.id } });
+    expect(refreshed.status).toBe('CONFIRMED');
+    // La cita ya está CONFIRMED y la función ya ha devuelto, pero el email
+    // todavía no ha salido: solo se dispara al hacer flush() de la tarea
+    // programada (equivalente a lo que hace after() tras la respuesta).
+    expect(emailSender.sent).toHaveLength(0);
+
+    await taskScheduler.flush();
+    expect(emailSender.sent).toHaveLength(1);
+    expect(emailSender.sent[0].to).toBe('pendiente-aprobacion@example.com');
+  });
+});
+
 describe('rejectPendingAppointment', () => {
   it('cancela la cita y envía el email de rechazo al cliente', async () => {
     const { seed, appointment } = await createPendingAppointment({ customerEmail: 'rechazo@example.com' });
@@ -128,6 +160,7 @@ describe('rejectPendingAppointment', () => {
       businessId: seed.business.id,
       appointmentId: appointment.id,
       emailSender,
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result.ok).toBe(true);
@@ -145,6 +178,7 @@ describe('rejectPendingAppointment', () => {
       businessId: seed.business.id,
       appointmentId: appointment.id,
       emailSender: new FakeEmailSender(),
+      taskScheduler: new FakeDeferredTaskRunner(),
     });
 
     expect(result).toEqual({ ok: false, reason: 'NOT_FOUND' });

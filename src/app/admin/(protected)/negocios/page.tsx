@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SubmitButton } from '@/components/SubmitButton';
 import { requireAdminSession } from '@/lib/admin/session';
 import { prisma } from '@/lib/db';
 import { listPlatformBusinesses, getOwnerInvitationCompletionMap } from '@/lib/admin/platform-business-service';
@@ -70,15 +71,18 @@ export default async function AdminNegociosPage({
                 <td className="px-4 py-2">
                   <div className="flex items-center gap-3">
                     <form action={setBusinessActiveAction.bind(null, business.id, !business.active)}>
-                      <button type="submit" className="text-xs text-slate-500 underline">
+                      <SubmitButton
+                        pendingLabel={business.active ? 'Suspendiendo…' : 'Activando…'}
+                        className="text-xs text-slate-500 underline"
+                      >
                         {business.active ? 'Suspender' : 'Activar'}
-                      </button>
+                      </SubmitButton>
                     </form>
                     {completionMap.get(business.id) === false && business.active && (
                       <form action={resendOwnerInvitationAction.bind(null, business.id)}>
-                        <button type="submit" className="text-xs text-slate-500 underline">
+                        <SubmitButton pendingLabel="Reenviando…" className="text-xs text-slate-500 underline">
                           Reenviar invitación
-                        </button>
+                        </SubmitButton>
                       </form>
                     )}
                   </div>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SubmitButton } from '@/components/SubmitButton';
 import { requirePanelSession } from '@/lib/panel/session';
 import { prisma } from '@/lib/db';
 import { getAgendaForBusiness, type AgendaAppointment } from '@/lib/panel/agenda-service';
@@ -52,18 +53,19 @@ export default async function PanelAgendaPage({
   const currentView = isWeek ? 'week' : 'day';
   const rangeEndExclusive = addDaysToLocalDateString(selectedDate, isWeek ? 7 : 1);
 
-  const agenda = await getAgendaForBusiness(prisma, {
-    businessId,
-    dateFromUtc: localMinutesToUtc(selectedDate, 0),
-    dateToUtc: localMinutesToUtc(rangeEndExclusive, 0),
-  });
-
-  const services = await prisma.service.findMany({ where: { businessId, active: true }, orderBy: { name: 'asc' } });
-  const employeesForForm = await prisma.employee.findMany({
-    where: { businessId, active: true },
-    include: { services: true },
-    orderBy: { name: 'asc' },
-  });
+  const [agenda, services, employeesForForm] = await Promise.all([
+    getAgendaForBusiness(prisma, {
+      businessId,
+      dateFromUtc: localMinutesToUtc(selectedDate, 0),
+      dateToUtc: localMinutesToUtc(rangeEndExclusive, 0),
+    }),
+    prisma.service.findMany({ where: { businessId, active: true }, orderBy: { name: 'asc' } }),
+    prisma.employee.findMany({
+      where: { businessId, active: true },
+      include: { services: true },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
 
   const previousDate = addDaysToLocalDateString(selectedDate, isWeek ? -7 : -1);
   const nextDate = addDaysToLocalDateString(selectedDate, isWeek ? 7 : 1);
@@ -98,33 +100,33 @@ export default async function PanelAgendaPage({
           {appt.manualApprovalPending && (
             <>
               <form action={approveAppointmentAction.bind(null, appt.id, selectedDate, currentView)}>
-                <button type="submit" className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white">
+                <SubmitButton pendingLabel="Aprobando…" className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white">
                   Aprobar
-                </button>
+                </SubmitButton>
               </form>
               <form action={rejectAppointmentAction.bind(null, appt.id, selectedDate, currentView)}>
-                <button type="submit" className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white">
+                <SubmitButton pendingLabel="Rechazando…" className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white">
                   Rechazar
-                </button>
+                </SubmitButton>
               </form>
             </>
           )}
           {appt.status === 'CONFIRMED' && (
             <>
               <form action={completeAppointmentAction.bind(null, appt.id, selectedDate, currentView)}>
-                <button type="submit" className="rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700">
+                <SubmitButton pendingLabel="Guardando…" className="rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700">
                   Completada
-                </button>
+                </SubmitButton>
               </form>
               <form action={markNoShowAppointmentAction.bind(null, appt.id, selectedDate, currentView)}>
-                <button type="submit" className="rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700">
+                <SubmitButton pendingLabel="Guardando…" className="rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700">
                   No presentado
-                </button>
+                </SubmitButton>
               </form>
               <form action={cancelAppointmentFromPanelAction.bind(null, appt.id, selectedDate, currentView)}>
-                <button type="submit" className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700">
+                <SubmitButton pendingLabel="Cancelando…" className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700">
                   Cancelar
-                </button>
+                </SubmitButton>
               </form>
             </>
           )}

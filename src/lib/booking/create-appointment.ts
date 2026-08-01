@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient, type Appointment } from '@prisma/client';
+import { Prisma, type PrismaClient, type Appointment, type Business, type Employee, type Service, type ServiceEmployee } from '@prisma/client';
 import { getAvailableSlots } from './slots';
 import { assignAnyAvailableEmployee } from './assignment';
 import {
@@ -42,7 +42,19 @@ export type CreateAppointmentResult =
 
 export async function isEmployeeAvailableAt(
   prisma: PrismaClient,
-  params: { businessId: string; serviceId: string; employeeId: string; start: Date; now: Date }
+  params: {
+    businessId: string;
+    serviceId: string;
+    employeeId: string;
+    start: Date;
+    now: Date;
+    // Entidades ya resueltas por quien llama, para que getAvailableSlots no
+    // vuelva a consultarlas (ver GetAvailableSlotsParams en slots.ts).
+    business?: Business;
+    service?: Service;
+    serviceEmployee?: ServiceEmployee | null;
+    employee?: Employee | null;
+  }
 ): Promise<boolean> {
   const localDate = getLocalDateString(params.start);
   const slots = await getAvailableSlots(prisma, {
@@ -52,6 +64,10 @@ export async function isEmployeeAvailableAt(
     dateFrom: localDate,
     dateTo: localDate,
     now: params.now,
+    business: params.business,
+    service: params.service,
+    serviceEmployee: params.serviceEmployee,
+    employee: params.employee,
   });
 
   return slots.some((slot) => slot.start.getTime() === params.start.getTime());
@@ -83,26 +99,32 @@ export async function createAppointment(
     return { ok: false, reason: 'RATE_LIMITED' };
   }
 
-  const notBlacklisted = await checkBlacklist(prisma, {
-    businessId: input.businessId,
-    phone: input.customerPhone,
-    email: input.customerEmail,
-  });
+  // Estas tres comprobaciones no dependen entre sí (ninguna necesita el
+  // resultado de otra), así que se lanzan en paralelo. El orden de fallo
+  // devuelto se conserva exactamente igual que en la versión en serie:
+  // se evalúan los resultados en el mismo orden (BLACKLISTED antes que
+  // CUSTOMER_LIMIT_REACHED antes que SERVICE_NOT_FOUND), solo cambia que la
+  // I/O ya no espera una consulta detrás de otra.
+  const [notBlacklisted, withinActiveLimit, service] = await Promise.all([
+    checkBlacklist(prisma, {
+      businessId: input.businessId,
+      phone: input.customerPhone,
+      email: input.customerEmail,
+    }),
+    checkActiveAppointmentLimit(prisma, {
+      businessId: input.businessId,
+      phone: input.customerPhone,
+      email: input.customerEmail,
+      now,
+    }),
+    prisma.service.findUnique({ where: { id: input.serviceId } }),
+  ]);
   if (!notBlacklisted) {
     return { ok: false, reason: 'BLACKLISTED' };
   }
-
-  const withinActiveLimit = await checkActiveAppointmentLimit(prisma, {
-    businessId: input.businessId,
-    phone: input.customerPhone,
-    email: input.customerEmail,
-    now,
-  });
   if (!withinActiveLimit) {
     return { ok: false, reason: 'CUSTOMER_LIMIT_REACHED' };
   }
-
-  const service = await prisma.service.findUnique({ where: { id: input.serviceId } });
   if (!service || service.businessId !== input.businessId || !service.active) {
     return { ok: false, reason: 'SERVICE_NOT_FOUND' };
   }
@@ -138,6 +160,10 @@ export async function createAppointment(
       employeeId: input.employeeId,
       start: input.start,
       now,
+      business,
+      service,
+      serviceEmployee,
+      employee,
     });
     if (!available) {
       return { ok: false, reason: 'EMPLOYEE_UNAVAILABLE' };
