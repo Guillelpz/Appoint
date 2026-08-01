@@ -13,7 +13,10 @@ export default defineConfig({
     hookTimeout: 30000,
     // e2e/ contiene specs de Playwright (test.afterAll de @playwright/test
     // choca con el runner de Vitest si se recogen aquí).
-    exclude: [...configDefaults.exclude, 'e2e/**'],
+    // .claude/ puede contener worktrees de git anidados: sus copias de los
+    // tests son de otra rama y se ejecutarían contra la misma BD appoint_test,
+    // duplicando la suite y colando sus specs de Playwright.
+    exclude: [...configDefaults.exclude, 'e2e/**', '**/.claude/**'],
   },
   resolve: {
     alias: {
