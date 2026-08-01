@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/db';
@@ -32,7 +33,20 @@ export interface PanelSession {
 // `active: false` seguía siendo accesible desde /panel para su dueño con
 // sesión válida — el flag `active` solo se comprobaba en la página pública,
 // business-lookup.ts).
-export async function requirePanelSession(): Promise<PanelSession> {
+//
+// Envuelta en cache() de React: memoiza por render de servidor (no entre
+// peticiones ni entre usuarios distintos — el cache se descarta al acabar
+// la petición), así que el layout protegido, la página y las Server
+// Actions que se ejecuten dentro de la misma petición/revalidación
+// comparten una única resolución de sesión en vez de repetir la llamada de
+// red a Supabase Auth + las consultas a Postgres en cada punto de la
+// jerarquía de componentes. Si esta función lanza (redirect() funciona
+// lanzando la excepción interna NEXT_REDIRECT), cache() no atrapa ni
+// transforma la excepción: simplemente memoiza la promesa devuelta por la
+// primera invocación, así que el segundo llamador recibe esa misma promesa
+// rechazada y la relanza — el flujo de redirección de Next.js sigue
+// intacto.
+export const requirePanelSession = cache(async (): Promise<PanelSession> => {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -42,15 +56,23 @@ export async function requirePanelSession(): Promise<PanelSession> {
     redirect('/panel/login');
   }
 
-  const businessId = await getOwnerBusinessIdForUser(prisma, user.id);
-  if (!businessId) {
+  // Ruta rápida: fusiona en una sola consulta lo que getOwnerBusinessIdForUser
+  // + isBusinessActive hacían en dos round-trips secuenciales a Postgres.
+  // Ambas funciones se mantienen exportadas e intactas (tienen tests propios
+  // establecidos) para quien necesite resolver cada paso por separado; esta
+  // es únicamente la ruta optimizada que usa requirePanelSession().
+  const membership = await prisma.membership.findFirst({
+    where: { userId: user.id, role: 'OWNER' },
+    select: { businessId: true, business: { select: { active: true } } },
+  });
+
+  if (!membership) {
     redirect('/panel/login?error=' + encodeURIComponent('Tu cuenta no tiene acceso a ningún panel de negocio.'));
   }
 
-  const active = await isBusinessActive(prisma, businessId);
-  if (!active) {
+  if (!membership.business.active) {
     redirect('/panel/login?error=' + encodeURIComponent('Este negocio está suspendido. Contacta con el soporte de Appoint.'));
   }
 
-  return { userId: user.id, email: user.email ?? '', businessId };
-}
+  return { userId: user.id, email: user.email ?? '', businessId: membership.businessId };
+});

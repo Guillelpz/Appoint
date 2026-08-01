@@ -7,8 +7,10 @@ import { CreateEmployeeForm } from './CreateEmployeeForm';
 
 export default async function EquipoPage() {
   const { businessId } = await requirePanelSession();
-  const employees = await listEmployeesForBusiness(prisma, businessId);
-  const services = await listServicesForBusiness(prisma, businessId);
+  const [employees, services] = await Promise.all([
+    listEmployeesForBusiness(prisma, businessId),
+    listServicesForBusiness(prisma, businessId),
+  ]);
   const activeServices = services.filter((service) => service.active);
 
   return (

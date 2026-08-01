@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { SubmitButton } from '@/components/SubmitButton';
 import { requirePanelSession } from '@/lib/panel/session';
 import { signOutAction } from '../login/actions';
 
@@ -28,9 +29,9 @@ export default async function PanelProtectedLayout({ children }: { children: Rea
           <div className="flex items-center gap-3 text-sm text-slate-500">
             <span>{email}</span>
             <form action={signOutAction}>
-              <button type="submit" className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">
+              <SubmitButton pendingLabel="Saliendo…" className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">
                 Salir
-              </button>
+              </SubmitButton>
             </form>
           </div>
         </div>

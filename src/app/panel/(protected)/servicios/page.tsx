@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SubmitButton } from '@/components/SubmitButton';
 import { requirePanelSession } from '@/lib/panel/session';
 import { prisma } from '@/lib/db';
 import { listServicesForBusiness } from '@/lib/panel/services-service';
@@ -54,9 +55,12 @@ export default async function ServiciosPage({
                 <td className="px-4 py-2">{service.active ? 'Activo' : 'Inactivo'}</td>
                 <td className="px-4 py-2">
                   <form action={setServiceActiveAction.bind(null, service.id, !service.active)}>
-                    <button type="submit" className="text-xs text-slate-500 underline">
+                    <SubmitButton
+                      pendingLabel={service.active ? 'Desactivando…' : 'Activando…'}
+                      className="text-xs text-slate-500 underline"
+                    >
                       {service.active ? 'Desactivar' : 'Activar'}
-                    </button>
+                    </SubmitButton>
                   </form>
                   {service.active && (
                     <p className="mt-1 text-xs text-slate-400">Al desactivarlo, dejará de poder reservarse.</p>

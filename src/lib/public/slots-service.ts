@@ -27,6 +27,7 @@ export async function getAvailableSlotsForBusiness(
     dateFrom: input.dateFrom,
     dateTo: input.dateTo,
     now: input.now,
+    business,
   });
 }
 

@@ -2,8 +2,8 @@ import { Prisma, type PrismaClient, type Appointment, type Customer } from '@pri
 import { isEmployeeAvailableAt, classifyUniqueViolation } from '@/lib/booking/create-appointment';
 import { releaseExpiredPendingSlot } from '@/lib/booking/active-appointments';
 import { validateManualAppointmentInput } from '@/lib/public/validate-booking-input';
-import { getEmailSender } from '@/lib/email/get-email-sender';
-import type { EmailSender } from '@/lib/email/types';
+import { getEmailSender, getDeferredTaskRunner } from '@/lib/email/get-email-sender';
+import type { DeferredTaskRunner, EmailSender } from '@/lib/email/types';
 import { sendAppointmentApprovedEmail } from '@/lib/email/appointment-notifications';
 
 export interface CreateManualAppointmentInput {
@@ -24,6 +24,7 @@ export interface CreateManualAppointmentInput {
   customerEmail?: string | null;
   now?: Date;
   emailSender?: EmailSender;
+  taskScheduler?: DeferredTaskRunner;
 }
 
 export type CreateManualAppointmentFailureReason =
@@ -85,6 +86,7 @@ export async function createManualAppointmentForBusiness(
 ): Promise<CreateManualAppointmentResult> {
   const now = input.now ?? new Date();
   const emailSender = input.emailSender ?? getEmailSender();
+  const taskScheduler = input.taskScheduler ?? getDeferredTaskRunner();
 
   const validation = validateManualAppointmentInput({
     customerName: input.customerName,
@@ -116,6 +118,9 @@ export async function createManualAppointmentForBusiness(
     employeeId: input.employeeId,
     start: input.start,
     now,
+    service,
+    serviceEmployee,
+    employee,
   });
   if (!available) {
     return { ok: false, reason: 'EMPLOYEE_UNAVAILABLE' };
@@ -176,12 +181,14 @@ export async function createManualAppointmentForBusiness(
       include: { service: true, employee: true, business: true },
     });
     if (withRelations) {
-      await sendAppointmentApprovedEmail(emailSender, {
-        appointment: withRelations,
-        service: withRelations.service,
-        employee: withRelations.employee,
-        business: withRelations.business,
-      });
+      taskScheduler.run(() =>
+        sendAppointmentApprovedEmail(emailSender, {
+          appointment: withRelations,
+          service: withRelations.service,
+          employee: withRelations.employee,
+          business: withRelations.business,
+        })
+      );
     }
   }
 

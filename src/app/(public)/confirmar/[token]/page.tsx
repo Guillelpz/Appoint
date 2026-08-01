@@ -8,6 +8,7 @@ import { getThemeCssVariables } from '@/lib/theme/theme';
 import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
 import { generateAppointmentIcs } from '@/lib/public/ics';
 import { confirmAppointmentAction } from './actions';
+import { SubmitButton } from '@/components/SubmitButton';
 
 function ThemedScreen({
   business,
@@ -147,12 +148,12 @@ export default async function ConfirmarPage({ params }: { params: Promise<{ toke
     <ThemedScreen business={business} title="Confirma tu cita">
       {renderSummaryCard(summary)}
       <form action={confirmAppointmentAction.bind(null, token)}>
-        <button
-          type="submit"
+        <SubmitButton
+          pendingLabel="Confirmando…"
           className="rounded-[var(--radius-theme,0.5rem)] bg-[var(--color-accent,#B25539)] px-6 py-3 font-semibold text-[var(--color-accent-contrast,#fff)]"
         >
           Confirmar cita
-        </button>
+        </SubmitButton>
       </form>
     </ThemedScreen>
   );

@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { CANCELLABLE_STATUSES } from '@/lib/booking/state';
-import { getEmailSender } from '@/lib/email/get-email-sender';
-import type { EmailSender } from '@/lib/email/types';
+import { getEmailSender, getDeferredTaskRunner } from '@/lib/email/get-email-sender';
+import type { DeferredTaskRunner, EmailSender } from '@/lib/email/types';
 import { sendAppointmentCancelledByBusinessEmail } from '@/lib/email/appointment-notifications';
 
 export type CancelFromPanelFailureReason = 'NOT_FOUND';
@@ -11,6 +11,7 @@ export interface CancelAppointmentFromPanelInput {
   businessId: string;
   appointmentId: string;
   emailSender?: EmailSender;
+  taskScheduler?: DeferredTaskRunner;
 }
 
 // Mismo patrón de claim atómico que cancelPublicAppointment
@@ -41,12 +42,15 @@ export async function cancelAppointmentFromPanel(
 
   if (withRelations) {
     const emailSender = input.emailSender ?? getEmailSender();
-    await sendAppointmentCancelledByBusinessEmail(emailSender, {
-      appointment: withRelations,
-      service: withRelations.service,
-      employee: withRelations.employee,
-      business: withRelations.business,
-    });
+    const taskScheduler = input.taskScheduler ?? getDeferredTaskRunner();
+    taskScheduler.run(() =>
+      sendAppointmentCancelledByBusinessEmail(emailSender, {
+        appointment: withRelations,
+        service: withRelations.service,
+        employee: withRelations.employee,
+        business: withRelations.business,
+      })
+    );
   }
 
   return { ok: true };

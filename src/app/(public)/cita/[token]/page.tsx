@@ -6,6 +6,7 @@ import { getThemeCssVariables } from '@/lib/theme/theme';
 import { formatAppointmentDateTime } from '@/lib/public/format-datetime';
 import { generateAppointmentIcs } from '@/lib/public/ics';
 import { cancelAppointmentAction } from './actions';
+import { SubmitButton } from '@/components/SubmitButton';
 
 const STATUS_MESSAGES: Record<string, string> = {
   PENDING: 'Tu cita está pendiente de confirmación.',
@@ -81,12 +82,12 @@ export default async function CitaPage({ params }: { params: Promise<{ token: st
 
       {canCancel && (
         <form action={cancelAppointmentAction.bind(null, token)}>
-          <button
-            type="submit"
+          <SubmitButton
+            pendingLabel="Cancelando…"
             className="rounded-[var(--radius-theme,0.5rem)] border border-[var(--color-accent,#B25539)] px-6 py-3 font-semibold text-[var(--color-accent,#B25539)]"
           >
             Cancelar cita
-          </button>
+          </SubmitButton>
         </form>
       )}
     </main>

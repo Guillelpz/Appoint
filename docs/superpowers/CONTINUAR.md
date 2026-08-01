@@ -1,10 +1,24 @@
 # Continuación del proyecto — estado y siguientes pasos
 
-_Actualizado: 2026-07-27 tras cerrar la **limpieza de minors post-Fase 6** (ver su sección más abajo). Antes de eso: Fase 6 (panel de super-admin) mergeada a `main` (`7ae1ffd`) el 2026-07-21 y pusheada a origin. El despliegue real (dominio, Vercel, Supabase producción) sigue sin empezar y es el siguiente hito elegido por el usuario, ver "Después de la Fase 6" más abajo._
+_Actualizado: 2026-08-01. **No queda ninguna rama sin mergear**: el rediseño de login y `perf/optimizacion-latencia` están ya en `main` y pusheados. El hito en curso sigue siendo el **despliegue real**, cuyo documento de trabajo es `DESPLIEGUE.md`; la Fase A está empezada. Antes de esto: limpieza de minors post-Fase 6 (2026-07-27) y Fase 6 mergeada a `main` (`7ae1ffd`) el 2026-07-21._
+
+## Optimización de latencia (`perf/optimizacion-latencia`, mergeada 2026-08-01)
+
+Optimización de latencia. No nació de un plan de `plans/`: se abordó directamente sobre el código ya existente. Dos commits:
+
+- **`df3a904` — `perf:`** cuatro frentes, sin cambio de comportamiento observable:
+  - **Motor de huecos**: `getSlotsForEmployee` (3 consultas *por empleado*, en bucle) → `getSlotsForEmployees`, una consulta con `in` para todos y reparto en memoria. De 3N consultas a 3. **El orden de salida es idéntico** (bucle empleado-mayor/fecha-menor + `sort` estable por `start`) — verificado en revisión, no re-investigar.
+  - **Consultas fusionadas/paralelas**: `groupBy` único en `assignAnyAvailableEmployee`; `Promise.all` en las tres comprobaciones independientes de `createAppointment` (**el orden de razones de fallo se conserva**: BLACKLISTED → CUSTOMER_LIMIT_REACHED → SERVICE_NOT_FOUND); `requirePanelSession` resuelve membership + `business.active` en una sola consulta; `requirePanelSession`/`requireAdminSession` envueltas en `cache()` de React. `getAvailableSlots` acepta entidades ya resueltas por quien llama — **sigue validando `businessId`/`active` sobre ellas**, no es un atajo que se salte comprobaciones.
+  - **Email diferido**: nuevo `DeferredTaskRunner` (`after()` de `next/server`), inyectable igual que `EmailSender`, con dobles en `src/test/fake-deferred-task-runner.ts`. Reservar/aprobar/rechazar/cancelar/crear cita manual responden sin esperar al envío. Los fallos de envío siguen sin propagarse (todos pasan por `trySend`).
+  - **Percepción**: `loading.tsx` en las tres zonas, `SubmitButton` con `useFormStatus` (feedback + bloqueo de doble envío) y carga bajo demanda de `BookingSheet` para sacar GSAP del bundle inicial de la página pública.
+  - Índices nuevos en `Appointment` (migración `add_appointment_performance_indexes`): `(businessId, start)`, `(businessId, customerPhone)`, `(businessId, customerEmail)`, `(status, start)`; se retira `(businessId)` a secas por redundante.
+- **`3222c1f` — `test:`** dos arreglos de infraestructura, salidos de la revisión de la rama (ver "Avisos técnicos" abajo).
+
+**Verificación de la rama**: 403/403 Vitest (52 archivos) + `pnpm lint` + `pnpm exec tsc --noEmit` + `pnpm build` + 3/3 Playwright. Todos los gates en verde, re-verificados sobre el resultado del merge.
 
 ## Estado actual
 
-- **Hecho y en `main`**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`), Fase 3 (página pública, mergeada 2026-07-16), Fase 4 (emails y recordatorios, mergeada 2026-07-17), Fase 5 (panel del negocio, mergeada 2026-07-20, `76d0095`) **Fase 6 (panel de super-admin, mergeada 2026-07-21, `7ae1ffd`)** y la **limpieza de minors post-Fase 6 (mergeada 2026-07-27)**.
+- **Hecho y en `main`**: Fases 1-2 (fundación + motor de reservas, merge `6492edb`), Fase 3 (página pública, mergeada 2026-07-16), Fase 4 (emails y recordatorios, mergeada 2026-07-17), Fase 5 (panel del negocio, mergeada 2026-07-20, `76d0095`) **Fase 6 (panel de super-admin, mergeada 2026-07-21, `7ae1ffd`)** la **limpieza de minors post-Fase 6 (mergeada 2026-07-27)**, el **rediseño de login (mergeado 2026-08-01, `1933612`)** y la **optimización de latencia (mergeada 2026-08-01)**.
 - **Fase 6 construido** (todo en `src/lib/admin/`, `src/app/admin/`, más algunos toques en `src/lib/panel/` y `src/lib/booking/`):
   - Modelo `PlatformAdmin` en tabla propia, independiente de `Membership`/`MembershipRole`.
   - `requireAdminSession()` / `isPlatformAdmin` (`src/lib/admin/session.ts`), mismo patrón que `requirePanelSession()` pero sin `businessId`, redirige a `/admin/login`.
@@ -48,16 +62,18 @@ Plan: `docs/superpowers/plans/2026-07-23-limpieza-minors.md` (5 tareas). Cierra 
 
 El fix de seguridad de la Fase 6 en `/panel/invitacion` sigue intacto y fue re-verificado en la revisión: `verifyOtp` se ejecuta SIEMPRE antes de `updateUser`, el `userId` que se marca viene de `verifyData.user.id` (derivado del servidor, nunca del input), y el `try/catch` best-effort del marcado no envuelve al `redirect()` (si lo hiciera, se tragaría el `NEXT_REDIRECT` de Next.js y rompería el flujo en silencio).
 
-## Ramas sin mergear (2026-08-01)
+## Rediseño de login (mergeado 2026-08-01, `1933612`)
 
-- **`worktree-rediseno-login`** (worktree en `.claude/worktrees/rediseno-login`, **sin mergear**): rediseño visual de `/panel/login` y `/admin/login`, extrayendo el componente compartido `src/components/LoginCard.tsx`. Spec en `docs/superpowers/specs/2026-08-01-rediseno-login-design.md`, plan en `docs/superpowers/plans/2026-08-01-rediseno-login.md`.
-  - **Mergear en squash**: el commit intermedio `de87ecb` no compila (borró `SubmitButton.tsx` mientras `LoginCard.tsx` todavía lo importaba; `0483f13` lo repara). Squashear deja fuera de `main` y de `git bisect` un commit roto.
-- **`perf/optimizacion-latencia`** (rama actual del checkout principal, **sin mergear y con cambios sin commitear**, ~35 archivos): optimización de latencia en curso.
-- **El orden de merge importa**: el árbol sin commitear de `perf/optimizacion-latencia` reescribe los mismos dos archivos de login (`/panel/login` y `/admin/login`) para cambiar el botón plano por un `SubmitButton` con estado de carga "Entrando…". Si el rediseño de login se mergea primero, ese cambio de dos archivos se reduce a una edición de tres líneas dentro de `LoginCard.tsx`, y las dos zonas ganan el estado de carga a la vez. Si `perf/optimizacion-latencia` se mergea primero, ambos archivos entran en conflicto de hunk completo con el rediseño.
+Rediseño visual de `/panel/login` y `/admin/login`, extrayendo el componente compartido `src/components/LoginCard.tsx`. Spec en `docs/superpowers/specs/2026-08-01-rediseno-login-design.md`, plan en `docs/superpowers/plans/2026-08-01-rediseno-login.md`. Se mergeó en squash a propósito: el commit intermedio `de87ecb` del worktree no compilaba (borró `SubmitButton.tsx` mientras `LoginCard.tsx` todavía lo importaba), y squashear lo deja fuera de `main` y de `git bisect`.
+
+**Resolución del solape con `perf/optimizacion-latencia`** (previsto de antemano, ocurrió tal cual): las dos ramas reescribían el mismo botón de envío de las dos páginas de login — el rediseño las convertía en `<LoginCard>` y la rama de latencia sustituía su `<button>` por `<SubmitButton>`. Al mergear el rediseño primero, el conflicto se resolvió quedándose con las páginas de `main` y moviendo el `SubmitButton` **dentro** de `LoginCard.tsx` (un solo sitio): las dos zonas conservan el diseño nuevo y ganan a la vez el estado de carga "Entrando…" y el bloqueo de doble envío.
 
 ## Siguiente paso inmediato
 
-Las Fases 1-6 completan el alcance funcional planificado del producto, y la limpieza de minors está cerrada. Lo único explícitamente pendiente es el **despliegue real** (ver "Después de la Fase 6"), que es lo que el usuario ha elegido como siguiente hito.
+Las Fases 1-6 completan el alcance funcional planificado del producto, y la limpieza de minors está cerrada.
+
+1. **Despliegue real** — el hito elegido por el usuario, con `DESPLIEGUE.md` como documento de trabajo (su sección "Estado del despliegue" dice en qué paso se está). Fase A empezada.
+2. **`LANZAMIENTO.md`** (creado 2026-07-31, borrador): roadmap comercial de "la app funciona" a "hay peluquerías pagando". Su Bloque 0 marca tres agujeros abiertos **hoy** que no deberían esperar al final del desarrollo: Resend sin dominio verificado (ninguna clienta puede recibir un email), recordatorios de 24 h apagados desde que se borró `vercel.json` (`816d939`, límite de cron del plan Hobby) y sin copias de seguridad (Supabase Free no las hace).
 
 ## Mecánica investigada de la invitación de dueños (relevante para tocar este flujo en el futuro)
 
@@ -65,6 +81,8 @@ Las Fases 1-6 completan el alcance funcional planificado del producto, y la limp
 
 ## Avisos técnicos para después de la Fase 6
 
+- **⚠️ Las dos suites de test son destructivas y solo corren contra el stack local** (guardia compartida `src/test/assert-destino-local.ts`): `pnpm test` y `pnpm exec playwright test` **abortan** si su destino no es localhost. Motivo real (2026-07-31): con el `.env` apuntando a producción durante la Fase A, una ejecución de la suite e2e sembró las cuentas demo —contraseñas en `.env.example`, versionado— en el proyecto Supabase real; las cuentas se borraron. `pnpm test` tenía el mismo agujero (`src/test/setup.ts` hace `TRUNCATE` de todas las tablas antes de *cada* test) y se cerró en `3222c1f`. **Nunca pongas credenciales de producción en el `.env` local** — ver el aviso ampliado en `DESPLIEGUE.md`, con la tabla de qué comando destruye qué.
+- **No metas worktrees de git dentro del repo sin comprobar la config de test**: `vitest.config.ts` excluye `**/.claude/**` por esto. Un worktree anidado colaba en la suite sus specs de Playwright y una segunda copia de todos los tests resueltos contra *otro* `node_modules`; con dos copias de `@prisma/client` en el mismo grafo, el `instanceof PrismaClientKnownRequestError` que clasifica los P2002 en `create-appointment.ts` deja de casar y el error escapa en vez de convertirse en `SLOT_TAKEN`. Aparenta ser un bug del motor de reservas y no lo es. Diagnosticado y cerrado el 2026-08-01; no re-investigar.
 - **Despliegue real**: dominio propio, Vercel (build + Cron) y proyecto Supabase de producción siguen SIN EMPEZAR. Cuando se aborde: replicar en producción las variables de `.env.example` (incluidas las nuevas `DEMO_SUPERADMIN_EMAIL`/`DEMO_SUPERADMIN_PASSWORD` — o mejor, dar de alta ahí un super-admin real y no depender de esas credenciales demo en producción), y revisar `supabase/config.toml` (`site_url`/`additional_redirect_urls`) si en el futuro se decide usar el `action_link` nativo de Supabase para algún flujo (hoy no se usa, ver arriba). El usuario aún tiene que comprar el dominio; cuando lo haga, esto se aborda como una sesión guiada paso a paso, probablemente sin necesitar el ciclo completo `writing-plans`/`subagent-driven-development`.
 - **Patrón `OwnerInviter` inyectable** (`src/lib/admin/owner-inviter.ts`): mismo patrón que `EmailSender` — cualquier lógica nueva que dependa de la Admin API de Supabase Auth debería inyectarse igual, para poder testear con un Fake sin golpear el servicio real desde Vitest.
 - **Rol `STAFF`** sigue declarado en `MembershipRole` pero sin UI ni lógica de autorización — candidato para una fase futura si se decide dar acceso de panel a empleados, no solo a dueños.

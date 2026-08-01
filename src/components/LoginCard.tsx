@@ -1,3 +1,5 @@
+import { SubmitButton } from '@/components/SubmitButton';
+
 interface LoginCardProps {
   title: string;
   description: string;
@@ -72,12 +74,12 @@ export function LoginCard({ title, description, action, error }: LoginCardProps)
           </div>
 
           <div className="p-6 pt-0">
-            <button
-              type="submit"
+            <SubmitButton
+              pendingLabel="Entrando…"
               className="h-10 w-full rounded-md bg-slate-900 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
             >
               Entrar
-            </button>
+            </SubmitButton>
           </div>
         </form>
       </div>
