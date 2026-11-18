@@ -161,6 +161,14 @@ terminal]` o `[Claude/repo]`.
 
 ### 3.4. Aplicar las migraciones
 
+> **Sin terminal (flujo desde el móvil):** el workflow
+> `.github/workflows/migrate-prod.yml` hace este paso solo. Se ejecuta en
+> cada push a `main` que toque `prisma/migrations/`, y a mano desde GitHub →
+> Actions → "Migraciones producción" → Run workflow. Necesita el secreto
+> `PROD_DIRECT_URL`, que es la cadena **Session pooler** de Supabase: la
+> conexión directa es solo IPv6 y los runners de GitHub no tienen IPv6. El
+> procedimiento de terminal de abajo sigue siendo válido como alternativa.
+
 - [ ] `[Guille, terminal]` Con `DATABASE_URL` y `DIRECT_URL` de producción
       exportadas en el entorno local (o en un `.env` temporal que **no**
       commiteas), ejecuta:

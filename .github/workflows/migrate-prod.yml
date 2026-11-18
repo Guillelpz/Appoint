@@ -1,0 +1,60 @@
+# Aplica las migraciones de Prisma a la BD de producción (Supabase) cuando
+# llegan a main, sin necesidad de un terminal: sustituye al paso 3.4 de
+# docs/superpowers/DESPLIEGUE.md. Usa `prisma migrate deploy`, que solo aplica
+# migraciones ya existentes en prisma/migrations/ (nunca `migrate dev`, que
+# puede ofrecer resetear la BD).
+#
+# Secreto necesario (GitHub → Settings → Secrets and variables → Actions):
+#   PROD_DIRECT_URL  cadena "Session pooler" de Supabase (puerto 5432 en el host
+#                    *.pooler.supabase.com). La conexión "Direct" de Supabase es
+#                    solo IPv6 y los runners de GitHub no tienen IPv6.
+name: Migraciones producción
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'prisma/migrations/**'
+  workflow_dispatch:
+
+concurrency:
+  group: migrate-prod
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Comprobar secreto
+        env:
+          PROD_DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: |
+          if [ -z "$PROD_DIRECT_URL" ]; then
+            echo "::error::Falta el secreto PROD_DIRECT_URL en GitHub Actions."
+            exit 1
+          fi
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Aplicar migraciones (prisma migrate deploy)
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: pnpm exec prisma migrate deploy
+
+      - name: Estado final de las migraciones
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: pnpm exec prisma migrate status
