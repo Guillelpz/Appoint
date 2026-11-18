@@ -1,0 +1,2 @@
+- Revertir estado de citas (por ejemplo, que al completarla se pueda volver atrás si hay un error).
+- Al reservar y haber un error, botón para contactar.
