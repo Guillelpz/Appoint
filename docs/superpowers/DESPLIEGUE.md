@@ -32,8 +32,8 @@ revés).
 
 | Variable | Para qué sirve | Secreta / pública | Obligatoria | De dónde se saca |
 |---|---|---|---|---|
-| `DATABASE_URL` | Cadena de conexión que usa Prisma Client en runtime (`prisma/schema.prisma:7`, `src/lib/db.ts`). | Secreta | Sí | Proyecto Supabase → conexión **pooler** (puerto **6543**). Ver aviso abajo. |
-| `DIRECT_URL` | Cadena de conexión directa que usa Prisma **solo para migraciones** (`prisma/schema.prisma:8`). | Secreta | Sí | Proyecto Supabase → conexión **directa** (puerto **5432**). Ver aviso abajo. |
+| `DATABASE_URL` | Cadena de conexión que usa Prisma Client en runtime (`prisma/schema.prisma:7`, `src/lib/db.ts`). | Secreta | Sí | Proyecto Supabase → botón **Connect** → **Transaction pooler** (puerto **6543**), **añadiendo `?pgbouncer=true` al final** (sin él Prisma puede fallar con *prepared statement already exists*). Ver aviso abajo. |
+| `DIRECT_URL` | Cadena de conexión que usa Prisma **solo para migraciones** (`prisma/schema.prisma:8`). | Secreta | Sí | Proyecto Supabase → botón **Connect** → **Session pooler** (puerto **5432**). No la "Direct connection": es solo IPv6, y ni Vercel ni los runners de GitHub tienen IPv6. Ver aviso abajo. |
 | `TEST_DATABASE_URL` | Solo para `pnpm test` contra `appoint_test`. | Secreta | **No** (no se usa en runtime, no hace falta en Vercel) | — |
 | `RESEND_API_KEY` | Clave de la API de Resend. Sin ella, `getEmailSender()` (`src/lib/email/get-email-sender.ts:6-11`) cae en `ConsoleEmailSender` y ningún email sale de verdad, solo se registra en los logs. | Secreta | Sí (para que los emails salgan de verdad en Fase A) | Dashboard de Resend → API Keys. |
 | `EMAIL_FROM` | Remitente de los emails. | Pública (aparece en el email) | Sí | En Fase A, déjalo en `onboarding@resend.dev` (único remitente permitido sin dominio verificado). En Fase B, cambia a un email del dominio propio. |
