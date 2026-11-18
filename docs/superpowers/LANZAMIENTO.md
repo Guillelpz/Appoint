@@ -32,7 +32,8 @@ Todo lo demás sí puede esperar a que termines de pulir producto.
 
 **Lo que está hecho:**
 - Fases 1-6 completas y en `main`: motor de reservas, página pública con temas,
-  emails, panel del negocio, panel de super-admin. 394 tests Vitest + 3 e2e.
+  emails, panel del negocio, panel de super-admin. 394 tests Vitest + 3 e2e en esa
+  fecha. Tras mergear la optimización de latencia (2026-08-01) son 403 Vitest + 3 e2e.
 - Desplegado en Vercel (plan Hobby) sobre Supabase en la nube, con la URL
   `.vercel.app`, y **verificado end-to-end** por el usuario.
 
@@ -176,7 +177,7 @@ Hoy se piden tres datos personales sin decir quién los trata, para qué, ni
 cuánto tiempo se conservan. Hay que añadir el texto informativo y el enlace a la
 política en el paso de datos del cliente (`StepCustomerData`).
 
-Aprovechar para activar `Customer.marketingConsent` (`prisma/schema.prisma:226`),
+Aprovechar para activar `Customer.marketingConsent` (`prisma/schema.prisma:229`),
 que existe en el modelo pero **nunca se recoge ni se usa**: una casilla
 desmarcada de "quiero recibir novedades" que le da a la peluquería una lista de
 marketing legal. Es, de paso, un argumento de venta.
@@ -217,9 +218,15 @@ Estructura recomendada:
 1. **Titular por el dolor, no por la funcionalidad.** No "software de gestión de
    citas", sino algo del estilo "Que no te dejen plantada. Tus clientas reservan
    solas y reciben recordatorio el día antes".
-2. **Demo real, no capturas.** El negocio demo ("Salón Aura") ya existe en
-   producción: enlazarlo como escaparate vivo y dejar que cualquiera reserve una
-   cita de prueba. Vale mil veces más que un vídeo.
+2. **Demo real, no capturas.** Enlazar un negocio de demostración en producción
+   como escaparate vivo, y dejar que cualquiera reserve una cita de prueba. Vale
+   mil veces más que un vídeo. **Sin verificar (2026-11-18)**: no se sabe si
+   "Salón Aura" existe en producción. `DESPLIEGUE.md` prevé una BD de producción
+   vacía y prohíbe ejecutar `pnpm db:seed` contra ella (crearía cuentas con
+   contraseñas versionadas). Si no existe, se da de alta a mano desde
+   `/admin/negocios`. Además, el logo, las fotos del negocio y las de los
+   empleados no se pueden editar desde ninguna pantalla (ver el anexo de la
+   spec), así que una demo con imágenes necesita, de momento, SQL.
 3. **Las tres funcionalidades que se venden solas:** QR en el mostrador sin que
    la clienta se instale nada, recordatorio automático 24 h antes, agenda en el
    móvil de la dueña.

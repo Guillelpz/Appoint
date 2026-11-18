@@ -7,10 +7,32 @@ código.
 
 ## 1. Estado del despliegue
 
-**No se ha empezado.** El proyecto nunca se ha desplegado: todo el
-desarrollo hasta ahora ha sido contra Supabase local en Docker
-(`pnpm exec supabase start`). No existe proyecto de Supabase en la nube ni de
-Vercel.
+_Actualizado: 2026-11-18._
+
+**Fase A hecha y verificada end-to-end por el usuario (2026-07-31).** Appoint
+está desplegado en Vercel (plan **Hobby**) con la URL `.vercel.app`, sobre un
+proyecto Supabase en la nube (plan Free, región UE). Desde entonces no ha
+habido más avances de despliegue.
+
+Lo que **sigue pendiente** (ver `LANZAMIENTO.md`, Bloque 0):
+
+- **Sin dominio propio** → Resend sigue limitado a `onboarding@resend.dev` y
+  solo entrega a la dirección de la cuenta de Resend (Fase B, sección 6).
+- **Sin cron de recordatorios de 24 h.** `vercel.json` se borró en `816d939`:
+  el plan Hobby solo admite crons diarios y el cron horario bloqueaba el
+  deploy. `/api/cron/reminders` sigue existiendo y funciona si se invoca a
+  mano (sección 5). Hay que resolverlo antes de tener clientes reales, con
+  GitHub Actions o con Vercel Pro (ver `LANZAMIENTO.md` §0.3).
+- **Sin copias de seguridad** (Supabase Free no las hace).
+- **No está verificado si el negocio demo "Salón Aura" existe en
+  producción.** Según esta guía, la BD de producción debía arrancar vacía,
+  sin seed. `LANZAMIENTO.md` §2.1 da por hecho que existe. Compruébalo con
+  `SELECT slug FROM public."Business";` en el SQL Editor de Supabase y
+  actualiza esta línea con el resultado.
+
+Las checklists de las secciones 3 a 5 se conservan tal como se siguieron,
+como referencia para un redespliegue o un segundo entorno. No se marcaron al
+ejecutarlas, así que el estado de verdad es esta sección.
 
 El plan es en dos fases (decisión del usuario, no lo replantees):
 
@@ -21,8 +43,7 @@ El plan es en dos fases (decisión del usuario, no lo replantees):
   `onboarding@resend.dev` y solo a la dirección de la cuenta de Resend).
 - **Fase B**: cuando el usuario compre el dominio propio. Ver sección 6.
 
-Actualiza esta sección conforme se avance, por ejemplo:
-`Fase A paso 3 hecho (proyecto Supabase creado), pendiente paso 4`.
+Actualiza esta sección conforme se avance.
 
 ## 2. Variables de entorno de producción
 
@@ -32,13 +53,13 @@ revés).
 
 | Variable | Para qué sirve | Secreta / pública | Obligatoria | De dónde se saca |
 |---|---|---|---|---|
-| `DATABASE_URL` | Cadena de conexión que usa Prisma Client en runtime (`prisma/schema.prisma:7`, `src/lib/db.ts`). | Secreta | Sí | Proyecto Supabase → conexión **pooler** (puerto **6543**). Ver aviso abajo. |
-| `DIRECT_URL` | Cadena de conexión directa que usa Prisma **solo para migraciones** (`prisma/schema.prisma:8`). | Secreta | Sí | Proyecto Supabase → conexión **directa** (puerto **5432**). Ver aviso abajo. |
+| `DATABASE_URL` | Cadena de conexión que usa Prisma Client en runtime (`prisma/schema.prisma:7`, `src/lib/db.ts`) y que la CLI de Prisma lee de `prisma.config.ts`. | Secreta | Sí | Proyecto Supabase → conexión **pooler** (puerto **6543**). Ver aviso abajo. |
+| `DIRECT_URL` | Cadena de conexión directa que usa Prisma **solo para migraciones**. La que manda es `directUrl` en `prisma.config.ts`: el bloque `datasource` del config sobrescribe el del schema (ver la sección 3.1). | Secreta | Sí | Proyecto Supabase → conexión **directa** (puerto **5432**). Ver aviso abajo. |
 | `TEST_DATABASE_URL` | Solo para `pnpm test` contra `appoint_test`. | Secreta | **No** (no se usa en runtime, no hace falta en Vercel) | — |
 | `RESEND_API_KEY` | Clave de la API de Resend. Sin ella, `getEmailSender()` (`src/lib/email/get-email-sender.ts:6-11`) cae en `ConsoleEmailSender` y ningún email sale de verdad, solo se registra en los logs. | Secreta | Sí (para que los emails salgan de verdad en Fase A) | Dashboard de Resend → API Keys. |
 | `EMAIL_FROM` | Remitente de los emails. | Pública (aparece en el email) | Sí | En Fase A, déjalo en `onboarding@resend.dev` (único remitente permitido sin dominio verificado). En Fase B, cambia a un email del dominio propio. |
 | **`APP_BASE_URL`** | Base para construir **todas** las URLs absolutas de los emails (confirmar/cancelar cita, invitación de dueño) y del QR de la página pública (`src/lib/email/urls.ts`). | Pública | Sí | La URL de producción de Vercel (`https://<proyecto>.vercel.app` en Fase A). |
-| `CRON_SECRET` | Vercel Cron añade automáticamente `Authorization: Bearer ${CRON_SECRET}` en cada invocación de `/api/cron/reminders` cuando esta variable está configurada en el proyecto de Vercel (`src/app/api/cron/reminders/route.ts:7`). | Secreta | Sí | Genera una cadena aleatoria larga (p. ej. `openssl rand -hex 32`) y pégala igual en Vercel; Vercel Cron la usa sola. |
+| `CRON_SECRET` | Protege `/api/cron/reminders`: sin `Authorization: Bearer ${CRON_SECRET}`, responde 401 (`src/app/api/cron/reminders/route.ts:7`). Vercel Cron añadiría el header solo, pero **hoy no hay Vercel Cron** (`vercel.json` se borró en `816d939`). Quien invoque el endpoint (a mano, o el futuro workflow de GitHub Actions) tiene que enviarlo. | Secreta | Sí | Genera una cadena aleatoria larga (p. ej. `openssl rand -hex 32`) y pégala en Vercel. Si se usa GitHub Actions, también en GitHub Secrets. |
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase, usada por el cliente de navegador, el middleware y el cliente admin (`src/lib/supabase/browser.ts`, `src/middleware.ts`, `src/lib/supabase/admin.ts`). | Pública (el prefijo `NEXT_PUBLIC_` la expone al navegador) | Sí | Dashboard de Supabase → Project Settings → API. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave anónima de Supabase Auth. | Pública | Sí | Dashboard de Supabase → Project Settings → API. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Clave de service role, usada por `getSupabaseAdminAuthClient()` (`src/lib/supabase/admin.ts`) para invitar dueños y para el alta de super-admin. Nunca se expone al cliente. | Secreta (privilegios totales, no versionar) | Sí | Dashboard de Supabase → Project Settings → API. |
@@ -124,8 +145,12 @@ terminal]` o `[Claude/repo]`.
       del Postgres; `prisma migrate deploy`, en cambio, necesita ejecutar
       DDL y mantener un `advisory lock` de sesión mientras aplica las
       migraciones, algo que no es compatible con un pooler en modo
-      transacción — de ahí que `prisma/schema.prisma:8` declare `directUrl`
-      aparte. Los nombres de host/puerto exactos que verás dependen de lo
+      transacción. Por eso se declara `directUrl` aparte. **Ojo**: la CLI
+      de Prisma toma el `datasource` de `prisma.config.ts`, que **sobrescribe**
+      el del schema. Sin `directUrl` en el config, `migrate deploy` usaba el
+      pooler y se quedaba colgado en producción (corregido en `ec79c89`).
+      `prisma/schema.prisma:8` también lo declara, pero el que manda es el
+      config. Los nombres de host/puerto exactos que verás dependen de lo
       que muestre el dashboard de Supabase en el momento en que lo abras
       (la interfaz cambia con el tiempo); el criterio que no cambia es
       "pooler para `DATABASE_URL`, directa para `DIRECT_URL`".
@@ -153,11 +178,14 @@ terminal]` o `[Claude/repo]`.
       asigna (puedes verla en el propio dashboard antes de desplegar, con el
       patrón `https://<nombre-del-proyecto>.vercel.app`; confírmala tras el
       primer deploy y corrígela si el nombre real difiere).
-- [ ] `vercel.json` ya está en el repo con el cron correcto
-      (`/api/cron/reminders` cada hora, `0 * * * *`) — no hay que
-      configurar nada más para que Vercel Cron lo recoja; se activa solo al
-      desplegar un proyecto con plan que soporte Cron Jobs (compruébalo en
-      el dashboard si el primer disparo no aparece).
+- [ ] **Cron: no hay `vercel.json` en el repo.** Existió con un cron
+      horario (`0 * * * *`), pero se borró en `816d939`: el plan Hobby solo
+      admite crons diarios y el cron horario bloqueaba el deploy. Un cron
+      diario no sirve, porque la ventana de detección de recordatorios es de
+      solo 2 h (`[now+23h, now+25h)`, `src/lib/email/reminders.ts`). Las
+      alternativas son GitHub Actions horario (gratis) o Vercel Pro con
+      `vercel.json` restaurado (ver `LANZAMIENTO.md` §0.3). Mientras tanto,
+      **no salen recordatorios**.
 
 ### 3.4. Aplicar las migraciones
 
@@ -168,8 +196,8 @@ terminal]` o `[Claude/repo]`.
       pnpm db:deploy
       ```
       Esto corre `prisma migrate deploy` (`package.json:18`), que aplica
-      las 6 migraciones existentes en `prisma/migrations/` en orden
-      (`20260712225310_init` … `20260727205711_add_membership_invitation_completed_at`)
+      las 7 migraciones existentes en `prisma/migrations/` en orden
+      (`20260712225310_init` … `20260731100000_add_appointment_performance_indexes`)
       contra la BD de producción, usando `DIRECT_URL`. **Nunca uses
       `pnpm db:migrate`** para esto — ver sección 7.
 - [ ] Comprueba que la migración `20260727205711_add_membership_invitation_completed_at`
@@ -294,12 +322,10 @@ mirar si no.
       `manualApproval` está desactivado) llega el email de confirmación al
       cliente de prueba. Si falla, revisa los Runtime Logs de Vercel para
       la ruta de reserva.
-- [ ] **Cron de recordatorios**: no hace falta esperar a que pase una cita
-      real. En el dashboard de Vercel, ve a la pestaña Cron Jobs del
-      proyecto y comprueba que `/api/cron/reminders` aparece programado
-      cada hora y que su última ejecución devolvió 200. Para forzar una
-      invocación manual sin esperar, puedes llamar al endpoint tú mismo con
-      el `CRON_SECRET` configurado:
+- [ ] **Cron de recordatorios**: hoy **no hay ningún cron programado**
+      (ver la sección 3.3), así que la pestaña Cron Jobs de Vercel estará
+      vacía. Para verificar el endpoint, llámalo tú mismo con el
+      `CRON_SECRET` configurado:
       ```
       curl -H "Authorization: Bearer <CRON_SECRET>" https://<tu-url>.vercel.app/api/cron/reminders
       ```
@@ -372,4 +398,5 @@ no ningún ajuste de Supabase Auth.
   herramienta.
 - **`TEST_DATABASE_URL` no hace falta en Vercel.** Solo la usa `pnpm test`
   contra Postgres local/CI (`src/test/prisma-client.ts`,
-  `src/test/global-setup.ts`); no la lee ningún código de runtime.
+  `src/test/global-setup.ts`) y la suite e2e (`e2e/global-setup.ts`, y el
+  servidor de `playwright.config.ts`); no la lee ningún código de runtime.
