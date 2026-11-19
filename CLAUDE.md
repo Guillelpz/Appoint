@@ -33,9 +33,9 @@ SaaS multi-tenant de gestión de citas para negocios locales (peluquerías, clí
 ## Comandos
 
 - `pnpm exec supabase start` — levantar Postgres local (Docker Desktop activo; BD dev en 127.0.0.1:54322, BD de tests `appoint_test`). Necesario antes de test/dev.
-- `pnpm test` — Vitest contra Postgres real (`TEST_DATABASE_URL`); 403 tests en 52 archivos (2026-08-01). `fileParallelism` desactivado a propósito (BD compartida): no lo reactives, y no lances dos ejecuciones a la vez.
+- `pnpm test` — Vitest contra Postgres real (`TEST_DATABASE_URL`); 409 tests en 53 archivos (2026-11-19). `fileParallelism` desactivado a propósito (BD compartida): no lo reactives, y no lances dos ejecuciones a la vez.
 - `pnpm exec playwright test` (= `pnpm test:e2e`) — 3 specs e2e: `booking-flow` (reservar→confirmar→cancelar), `panel-approval` (login del panel + aprobación manual) y `admin-flow` (alta de negocio + invitación de dueño). Levanta su propio servidor Next contra `appoint_test`.
-- **Las dos suites son destructivas y abortan si su destino no es localhost** (`src/test/assert-destino-local.ts`). Nunca pongas credenciales de producción en el `.env` local.
+- **Las dos suites y `pnpm db:seed` son destructivos y abortan si su destino no es localhost** (`src/test/assert-destino-local.ts`, `src/lib/seed/assert-seed-local.ts`). Nunca pongas credenciales de producción en el `.env` local.
 - `pnpm dev` / `pnpm build` / `pnpm lint` — Next.js (dev con turbopack; build sin él, a propósito).
 - `pnpm db:migrate` (`prisma migrate dev`) / `pnpm db:seed` — migraciones y seed demo ("Salón Aura" + dueño + super-admin). **Solo en local.**
 - `pnpm db:deploy` (`prisma migrate deploy`) — la única forma de aplicar migraciones a producción (ver `DESPLIEGUE.md`).

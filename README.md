@@ -56,7 +56,7 @@ Sin `RESEND_API_KEY`, los emails no se envían: se escriben en la consola.
 | `pnpm db:migrate` | `prisma migrate dev`. **Solo en local** |
 | `pnpm db:deploy` | `prisma migrate deploy`. La única forma de migrar producción |
 
-> ⚠️ Las suites de test son destructivas (`TRUNCATE` de todas las tablas, cuentas demo en Auth) y abortan si su destino no es localhost. Nunca pongas credenciales de producción en el `.env` local.
+> ⚠️ Las suites de test y el seed son destructivos (`TRUNCATE` de todas las tablas, cuentas demo con contraseñas públicas en Auth) y abortan si su destino no es localhost. Nunca pongas credenciales de producción en el `.env` local.
 
 ## Documentación
 

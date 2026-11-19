@@ -26,10 +26,12 @@ Lo que **sigue pendiente** (ver `LANZAMIENTO.md`, Bloque 0):
 - **Sin copias de seguridad** (Supabase Free no las hace).
 - **"Salón Aura" existe en producción: se ejecutó `pnpm db:seed` contra
   ella** (confirmado por el usuario el 2026-11-19), en contra de lo que
-  preveía esta guía (BD vacía). **⚠️ Acción pendiente y urgente:** el seed
-  no crea solo el negocio. También crea en Supabase Auth un **dueño demo** y
-  un **super-admin demo** con contraseñas públicas, y aunque no se definan
-  las variables `DEMO_*`, el código usa valores por defecto
+  preveía esta guía (BD vacía). El usuario confirma que **se creó todo**: el
+  negocio, el **dueño demo** y el **super-admin demo**. Desde entonces el seed
+  aborta si apunta fuera de localhost (`src/lib/seed/assert-seed-local.ts`),
+  así que no puede repetirse. **⚠️ Acción pendiente y urgente:** las cuentas
+  creadas tienen contraseñas públicas, que el código usa por defecto aunque
+  no se definan las variables `DEMO_*`
   (`src/lib/seed/demo-owner.ts:11-12`, `src/lib/seed/demo-superadmin.ts:11-12`):
   `dueno@salonaura.example` / `appoint-demo-2026` y
   `superadmin@appoint.example` / `appoint-admin-2026`, que también están en
@@ -110,7 +112,7 @@ avisar (`prisma.config.ts` carga `.env` con dotenv y de ahí saca
 |---|---|
 | `pnpm dev` | Cada prueba que hagas en localhost escribe en la BD real. |
 | `pnpm db:migrate` (`prisma migrate dev`) | Si detecta divergencia con el historial de migraciones, **ofrece resetear la base de datos**, es decir, borrarla. |
-| `pnpm db:seed` | Crea el negocio demo y el **super-admin demo, cuya contraseña está en `.env.example`, que sí está versionado**. |
+| `pnpm db:seed` | Crearía el negocio demo y el **super-admin demo, cuya contraseña está en `.env.example`, que sí está versionado**. Hoy aborta antes de tocar nada (guardia `assert-seed-local.ts`). |
 
 **Ocurrió de verdad (2026-07-31).** Con el `.env` configurado para la Fase A,
 una ejecución de `pnpm exec playwright test` dio de alta las dos cuentas demo
@@ -397,6 +399,10 @@ no ningún ajuste de Supabase Auth.
   contraseñas que cualquiera puede leer en el repo. **No basta con no
   definir las `DEMO_*`**: `getDemoOwnerCredentials`/`getDemoSuperAdminCredentials`
   usan esas mismas contraseñas por defecto. **Ya ocurrió**: ver la sección 1.
+  Desde entonces `prisma/seed.ts` aborta si `DATABASE_URL` o
+  `NEXT_PUBLIC_SUPABASE_URL` no apuntan a localhost
+  (`src/lib/seed/assert-seed-local.ts`), la misma guardia que usan las suites
+  de test.
 - **La ruta `/` sigue siendo la plantilla de `create-next-app`.**
   `src/app/page.tsx` es literalmente el boilerplate por defecto de Next.js
   (logo de Next, enlaces a "Deploy now" y "Read our docs" de Vercel/Next,
