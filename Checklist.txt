@@ -1,2 +1,4 @@
 - Revertir estado de citas (por ejemplo, que al completarla se pueda volver atrás si hay un error).
 - Al reservar y haber un error, botón para contactar.
+- Mejorar página de establecer contraseña.
+- En confirmar y cancelar, añadir botón de registrarse (pequeño header con las opciones mínimas).
