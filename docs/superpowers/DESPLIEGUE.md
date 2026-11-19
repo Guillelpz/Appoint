@@ -71,8 +71,8 @@ revés).
 
 | Variable | Para qué sirve | Secreta / pública | Obligatoria | De dónde se saca |
 |---|---|---|---|---|
-| `DATABASE_URL` | Cadena de conexión que usa Prisma Client en runtime (`prisma/schema.prisma:7`, `src/lib/db.ts`) y que la CLI de Prisma lee de `prisma.config.ts`. | Secreta | Sí | Proyecto Supabase → conexión **pooler** (puerto **6543**). Ver aviso abajo. |
-| `DIRECT_URL` | Cadena de conexión directa que usa Prisma **solo para migraciones**. La que manda es `directUrl` en `prisma.config.ts`: el bloque `datasource` del config sobrescribe el del schema (ver la sección 3.1). | Secreta | Sí | Proyecto Supabase → conexión **directa** (puerto **5432**). Ver aviso abajo. |
+| `DATABASE_URL` | Cadena de conexión que usa Prisma Client en runtime (`prisma/schema.prisma:7`, `src/lib/db.ts`) y que la CLI de Prisma lee de `prisma.config.ts`. | Secreta | Sí | Proyecto Supabase → botón **Connect** → **Transaction pooler** (puerto **6543**), **añadiendo `?pgbouncer=true` al final** (sin él Prisma puede fallar con *prepared statement already exists*). Ver aviso abajo. |
+| `DIRECT_URL` | Cadena de conexión que usa Prisma **solo para migraciones**. La que manda es `directUrl` en `prisma.config.ts`: el bloque `datasource` del config sobrescribe el del schema (ver la sección 3.1). | Secreta | Sí | Proyecto Supabase → botón **Connect** → **Session pooler** (puerto **5432**). No la "Direct connection": es solo IPv6, y ni Vercel ni los runners de GitHub tienen IPv6. Ver aviso abajo. |
 | `TEST_DATABASE_URL` | Solo para `pnpm test` contra `appoint_test`. | Secreta | **No** (no se usa en runtime, no hace falta en Vercel) | — |
 | `RESEND_API_KEY` | Clave de la API de Resend. Sin ella, `getEmailSender()` (`src/lib/email/get-email-sender.ts:6-11`) cae en `ConsoleEmailSender` y ningún email sale de verdad, solo se registra en los logs. | Secreta | Sí (para que los emails salgan de verdad en Fase A) | Dashboard de Resend → API Keys. |
 | `EMAIL_FROM` | Remitente de los emails. | Pública (aparece en el email) | Sí | En Fase A, déjalo en `onboarding@resend.dev` (único remitente permitido sin dominio verificado). En Fase B, cambia a un email del dominio propio. |
@@ -133,7 +133,7 @@ basta con definirlas para ese único comando y cerrar la terminal después.
 
 ```powershell
 $env:DATABASE_URL="<cadena del pooler, puerto 6543>"
-$env:DIRECT_URL="<cadena directa, puerto 5432>"
+$env:DIRECT_URL="<cadena Session pooler, puerto 5432>"
 pnpm db:deploy
 ```
 
@@ -156,7 +156,8 @@ terminal]` o `[Claude/repo]`.
       cadenas de conexión:
       - La de **Connection pooling** (Transaction/Session pooler, puerto
         **6543**) → `DATABASE_URL`.
-      - La **directa** (puerto **5432**) → `DIRECT_URL`.
+      - La de **Session pooler** (puerto **5432**) → `DIRECT_URL`. No la
+        "Direct connection": es solo IPv6 (ver la tabla de la sección 2).
 
       **Por qué dos**: en runtime (cada función serverless de Vercel abre su
       propia conexión) hace falta el pooler para no agotar las conexiones
@@ -171,7 +172,8 @@ terminal]` o `[Claude/repo]`.
       config. Los nombres de host/puerto exactos que verás dependen de lo
       que muestre el dashboard de Supabase en el momento en que lo abras
       (la interfaz cambia con el tiempo); el criterio que no cambia es
-      "pooler para `DATABASE_URL`, directa para `DIRECT_URL`".
+      "Transaction pooler (+ `?pgbouncer=true`) para `DATABASE_URL`, Session
+      pooler para `DIRECT_URL`".
 
 ### 3.2. Resend
 
@@ -206,6 +208,14 @@ terminal]` o `[Claude/repo]`.
       **no salen recordatorios**.
 
 ### 3.4. Aplicar las migraciones
+
+> **Sin terminal (flujo desde el móvil):** el workflow
+> `.github/workflows/migrate-prod.yml` hace este paso solo. Se ejecuta en
+> cada push a `main` que toque `prisma/migrations/`, y a mano desde GitHub →
+> Actions → "Migraciones producción" → Run workflow. Necesita el secreto
+> `PROD_DIRECT_URL`, que es la cadena **Session pooler** de Supabase: la
+> conexión directa es solo IPv6 y los runners de GitHub no tienen IPv6. El
+> procedimiento de terminal de abajo sigue siendo válido como alternativa.
 
 - [ ] `[Guille, terminal]` Con `DATABASE_URL` y `DIRECT_URL` de producción
       exportadas en el entorno local (o en un `.env` temporal que **no**

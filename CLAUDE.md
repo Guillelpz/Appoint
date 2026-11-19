@@ -39,5 +39,6 @@ SaaS multi-tenant de gestión de citas para negocios locales (peluquerías, clí
 - `pnpm dev` / `pnpm build` / `pnpm lint` — Next.js (dev con turbopack; build sin él, a propósito).
 - `pnpm db:migrate` (`prisma migrate dev`) / `pnpm db:seed` — migraciones y seed demo ("Salón Aura" + dueño + super-admin). **Solo en local.**
 - `pnpm db:deploy` (`prisma migrate deploy`) — la única forma de aplicar migraciones a producción (ver `DESPLIEGUE.md`).
+- CI: `.github/workflows/ci.yml` corre lint + tipos + Vitest + build + Playwright en cada PR (Supabase local en el runner); `migrate-prod.yml` aplica migraciones a producción.
 - `.env` no versionado: copiar de `.env.example` (valores de Supabase local ya válidos).
 - Versiones ancladas exactas (sin caret) a propósito en las dependencias de runtime y en las de test/framework (Next 15.5.20, Prisma 6.19.3, Vitest 4.1.10, Playwright 1.61.1...). Algunas devDependencies de tooling sí llevan caret (`typescript`, `eslint`, `tailwindcss`, `@types/*`, `supabase`, `tsx`, `dotenv`). No actualizar ni añadir dependencias sin decisión explícita.

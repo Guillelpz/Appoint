@@ -8,13 +8,15 @@ interface LoginCardProps {
   // serializa su cuerpo.
   action: (formData: FormData) => Promise<void>;
   error?: string;
+  // Contenido opcional bajo la tarjeta (p. ej. la versión en /admin/login).
+  footer?: React.ReactNode;
 }
 
 // Tarjeta de acceso compartida por /panel/login y /admin/login. SOLO
 // presentación: cada zona conserva su propio Server Action, porque /panel y
 // /admin son superficies de autenticación distintas, con tablas de roles y
 // guards separados a propósito (ver CLAUDE.md).
-export function LoginCard({ title, description, action, error }: LoginCardProps) {
+export function LoginCard({ title, description, action, error, footer }: LoginCardProps) {
   // El error llega por un `redirect(...?error=)`, es decir en la propia carga
   // de página: el `role="alert"` ya existe cuando el árbol de accesibilidad se
   // construye, así que los lectores de pantalla no lo anuncian por sí solo
@@ -27,7 +29,7 @@ export function LoginCard({ title, description, action, error }: LoginCardProps)
     : {};
 
   return (
-    <main className="flex min-h-screen items-center-safe justify-center px-4 py-8">
+    <main className="flex min-h-screen flex-col items-center-safe justify-center gap-4 px-4 py-8">
       <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm sm:w-96">
         <div className="p-6">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
@@ -83,6 +85,7 @@ export function LoginCard({ title, description, action, error }: LoginCardProps)
           </div>
         </form>
       </div>
+      {footer}
     </main>
   );
 }

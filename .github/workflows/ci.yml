@@ -1,0 +1,68 @@
+# CI de cada PR y de cada push a main: lint, tipos, Vitest, build y Playwright.
+# Es el sustituto de "probarlo en el PC": corre contra un Supabase local
+# (`supabase start`) dentro del runner, nunca contra producción. Las guardias
+# assertDestinoLocal de ambas suites lo garantizan además en el propio código.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: .env de CI (valores locales de .env.example)
+        run: cp .env.example .env
+
+      - name: Generar cliente Prisma
+        run: pnpm exec prisma generate
+
+      - name: Arrancar Supabase local
+        # Solo hacen falta Postgres, Auth y el gateway; el resto se omite
+        # para que arranque antes.
+        run: pnpm exec supabase start -x studio,imgproxy,edge-runtime,analytics,vector,realtime,storage,meta
+
+      - name: Crear BD de tests
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c "CREATE DATABASE appoint_test;"
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Tipos
+        run: pnpm exec tsc --noEmit
+
+      - name: Vitest
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Instalar Chromium para Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Playwright (e2e)
+        run: pnpm exec playwright test --trace off
+
+      - name: Logs del servidor si falla
+        if: failure()
+        run: pnpm exec supabase status || true

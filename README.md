@@ -56,6 +56,8 @@ Sin `RESEND_API_KEY`, los emails no se envían: se escriben en la consola.
 | `pnpm db:migrate` | `prisma migrate dev`. **Solo en local** |
 | `pnpm db:deploy` | `prisma migrate deploy`. La única forma de migrar producción |
 
+CI (`.github/workflows/ci.yml`): en cada PR y en cada push a `main` ejecuta lint, tipos, Vitest, build y Playwright contra un Supabase local dentro del runner. `.github/workflows/migrate-prod.yml` aplica las migraciones a producción (ver `DESPLIEGUE.md` §3.4).
+
 > ⚠️ Las suites de test y el seed son destructivos (`TRUNCATE` de todas las tablas, cuentas demo con contraseñas públicas en Auth) y abortan si su destino no es localhost. Nunca pongas credenciales de producción en el `.env` local.
 
 ## Documentación
@@ -66,3 +68,4 @@ Sin `RESEND_API_KEY`, los emails no se envían: se escriben en la consola.
 - `docs/superpowers/DESPLIEGUE.md`: despliegue a producción y su estado.
 - `docs/superpowers/LANZAMIENTO.md`: roadmap comercial (borrador).
 - `docs/superpowers/plans/`: planes de implementación por fase.
+- `Checklist.txt`: lista informal de mejoras pendientes.
