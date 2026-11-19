@@ -220,11 +220,10 @@ Estructura recomendada:
    solas y reciben recordatorio el día antes".
 2. **Demo real, no capturas.** Enlazar un negocio de demostración en producción
    como escaparate vivo, y dejar que cualquiera reserve una cita de prueba. Vale
-   mil veces más que un vídeo. **Sin verificar (2026-11-18)**: no se sabe si
-   "Salón Aura" existe en producción. `DESPLIEGUE.md` prevé una BD de producción
-   vacía y prohíbe ejecutar `pnpm db:seed` contra ella (crearía cuentas con
-   contraseñas versionadas). Si no existe, se da de alta a mano desde
-   `/admin/negocios`. Además, el logo, las fotos del negocio y las de los
+   mil veces más que un vídeo. "Salón Aura" ya existe en producción (se ejecutó
+   `pnpm db:seed`, 2026-11-19). **Antes de enlazarlo hay que eliminar el
+   super-admin demo y asegurar el dueño demo** que creó ese mismo seed con
+   contraseñas públicas (ver `DESPLIEGUE.md` §1). Además, el logo, las fotos del negocio y las de los
    empleados no se pueden editar desde ninguna pantalla (ver el anexo de la
    spec), así que una demo con imágenes necesita, de momento, SQL.
 3. **Las tres funcionalidades que se venden solas:** QR en el mostrador sin que

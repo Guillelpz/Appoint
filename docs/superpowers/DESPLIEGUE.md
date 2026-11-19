@@ -24,11 +24,27 @@ Lo que **sigue pendiente** (ver `LANZAMIENTO.md`, Bloque 0):
   mano (sección 5). Hay que resolverlo antes de tener clientes reales, con
   GitHub Actions o con Vercel Pro (ver `LANZAMIENTO.md` §0.3).
 - **Sin copias de seguridad** (Supabase Free no las hace).
-- **No está verificado si el negocio demo "Salón Aura" existe en
-  producción.** Según esta guía, la BD de producción debía arrancar vacía,
-  sin seed. `LANZAMIENTO.md` §2.1 da por hecho que existe. Compruébalo con
-  `SELECT slug FROM public."Business";` en el SQL Editor de Supabase y
-  actualiza esta línea con el resultado.
+- **"Salón Aura" existe en producción: se ejecutó `pnpm db:seed` contra
+  ella** (confirmado por el usuario el 2026-11-19), en contra de lo que
+  preveía esta guía (BD vacía). **⚠️ Acción pendiente y urgente:** el seed
+  no crea solo el negocio. También crea en Supabase Auth un **dueño demo** y
+  un **super-admin demo** con contraseñas públicas, y aunque no se definan
+  las variables `DEMO_*`, el código usa valores por defecto
+  (`src/lib/seed/demo-owner.ts:11-12`, `src/lib/seed/demo-superadmin.ts:11-12`):
+  `dueno@salonaura.example` / `appoint-demo-2026` y
+  `superadmin@appoint.example` / `appoint-admin-2026`, que también están en
+  `.env.example`. Mientras existan, **cualquiera puede entrar en `/admin` de
+  producción**. Haz lo siguiente:
+  1. Comprueba si existen con
+     `SELECT id, email FROM auth.users WHERE email IN ('superadmin@appoint.example','dueno@salonaura.example');`
+     (o con los emails `DEMO_*` que hubiera en el entorno).
+  2. Borra el super-admin demo: `DELETE FROM public."PlatformAdmin" WHERE "userId" = '<id>';`
+     y después elimina el usuario en Authentication → Users.
+  3. Si quieres conservar Salón Aura como escaparate, deja el negocio pero
+     cambia la contraseña del dueño demo, o borra el usuario y su
+     `Membership`.
+  4. Comprueba que tu super-admin real sigue funcionando y actualiza esta
+     línea.
 
 Las checklists de las secciones 3 a 5 se conservan tal como se siguieron,
 como referencia para un redespliegue o un segundo entorno. No se marcaron al
@@ -63,8 +79,8 @@ revés).
 | `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase, usada por el cliente de navegador, el middleware y el cliente admin (`src/lib/supabase/browser.ts`, `src/middleware.ts`, `src/lib/supabase/admin.ts`). | Pública (el prefijo `NEXT_PUBLIC_` la expone al navegador) | Sí | Dashboard de Supabase → Project Settings → API. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave anónima de Supabase Auth. | Pública | Sí | Dashboard de Supabase → Project Settings → API. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Clave de service role, usada por `getSupabaseAdminAuthClient()` (`src/lib/supabase/admin.ts`) para invitar dueños y para el alta de super-admin. Nunca se expone al cliente. | Secreta (privilegios totales, no versionar) | Sí | Dashboard de Supabase → Project Settings → API. |
-| `DEMO_OWNER_EMAIL` / `DEMO_OWNER_PASSWORD` | Credenciales del dueño demo del seed (`src/lib/seed/demo-owner.ts`). | — | **NO definir en producción** | La BD de producción arranca vacía; no hay negocio demo. |
-| `DEMO_SUPERADMIN_EMAIL` / `DEMO_SUPERADMIN_PASSWORD` | Credenciales del super-admin demo del seed (`src/lib/seed/demo-superadmin.ts`). | — | **NO definir en producción** | El primer super-admin se da de alta a mano (sección 4), no por seed. |
+| `DEMO_OWNER_EMAIL` / `DEMO_OWNER_PASSWORD` | Credenciales del dueño demo del seed (`src/lib/seed/demo-owner.ts`). | — | **NO definir en producción** | El seed no debe ejecutarse en producción. Ojo: no definirlas **no** protege, porque el código usa valores por defecto. |
+| `DEMO_SUPERADMIN_EMAIL` / `DEMO_SUPERADMIN_PASSWORD` | Credenciales del super-admin demo del seed (`src/lib/seed/demo-superadmin.ts`). | — | **NO definir en producción** | El primer super-admin se da de alta a mano (sección 4), no por seed. Igual que arriba: hay valores por defecto en el código. |
 
 ### ⚠️ Aviso: `APP_BASE_URL` es el fallo más silencioso de todo el despliegue
 
@@ -378,7 +394,9 @@ no ningún ajuste de Supabase Auth.
   literales que están en `.env.example` (`DEMO_OWNER_PASSWORD`,
   `DEMO_SUPERADMIN_PASSWORD`) — y `.env.example` está **versionado en
   git**, es público. Ejecutarlo en producción crearía cuentas reales con
-  contraseñas que cualquiera puede leer en el repo.
+  contraseñas que cualquiera puede leer en el repo. **No basta con no
+  definir las `DEMO_*`**: `getDemoOwnerCredentials`/`getDemoSuperAdminCredentials`
+  usan esas mismas contraseñas por defecto. **Ya ocurrió**: ver la sección 1.
 - **La ruta `/` sigue siendo la plantilla de `create-next-app`.**
   `src/app/page.tsx` es literalmente el boilerplate por defecto de Next.js
   (logo de Next, enlaces a "Deploy now" y "Read our docs" de Vercel/Next,
