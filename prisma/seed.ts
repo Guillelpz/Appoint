@@ -6,6 +6,11 @@ import {
   seedDemoSuperAdminRecord,
   getDemoSuperAdminCredentials,
 } from '../src/lib/seed/demo-superadmin';
+import { assertSeedDestinoLocal } from '../src/lib/seed/assert-seed-local';
+
+// Antes de crear el cliente y de tocar nada: el seed solo puede correr contra el
+// stack local (ver assert-seed-local.ts y el incidente que lo motivó).
+assertSeedDestinoLocal(process.env);
 
 const prisma = new PrismaClient();
 

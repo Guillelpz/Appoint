@@ -122,3 +122,27 @@ Alta de negocios (crea negocio + invita a dueño por email), activar/suspender, 
 ## Fuera de alcance (fase 2+)
 
 Pagos/suscripciones, SMS/WhatsApp, i18n, lista de espera ("avísame si se libera"), OTP progresivo, apps nativas, subdominios por negocio.
+
+---
+
+## Anexo — Desviaciones respecto a la implementación (revisión 2026-11-18)
+
+El cuerpo de esta spec se conserva tal como se aprobó. Este anexo recoge en qué se aparta hoy el código. Así nadie toma la spec como descripción literal del sistema. Los huecos que siguen abiertos están también en `docs/superpowers/CONTINUAR.md`, en "Huecos respecto a la spec".
+
+### Cambios de diseño ya decididos (la implementación es la referencia)
+
+| Spec | Implementación | Dónde se decidió |
+|---|---|---|
+| `Membership` con rol global `SUPERADMIN` | Tabla propia `PlatformAdmin` (`userId` único), independiente de `Membership`. `MembershipRole` solo tiene `OWNER` y `STAFF` | Plan de la Fase 6 |
+| Cron: Vercel Cron horario para recordatorios | **No hay cron programado.** `vercel.json` se borró en `816d939` porque el plan Hobby solo admite crons diarios. `/api/cron/reminders` existe y funciona si se invoca a mano. Ventana de envío: `[now+23h, now+25h)` | Decisión del usuario en la Fase A del despliegue (ver `DESPLIEGUE.md`, `LANZAMIENTO.md` §0.3) |
+| Rol `STAFF` con acceso a `/panel` | Declarado en el enum, sin UI ni autorización: solo `OWNER` entra al panel | Plan de la Fase 5 |
+| Presets "definidos como archivos de tema" | Un único mapa `THEME_PRESETS` en `src/lib/theme/theme.ts`. Añadir un preset = una entrada nueva en ese mapa + un valor en el enum `ThemePreset` (migración) | Implementación de la Fase 3 |
+| `manualApproval`: "todas las citas requieren aprobación del negocio" (sin más detalle) | Doble paso: confirmar por email fija `emailVerifiedAt` y la cita **sigue `PENDING`** hasta que el negocio la aprueba en `/panel`. Una pendiente ya verificada no caduca a los 30 min y sigue bloqueando el hueco | Plan de la Fase 4 (concreción, no contradicción) |
+| Super-admin + despliegue en la misma fase 6 | La Fase 6 solo incluyó el super-admin. El despliegue es un hito aparte (`DESPLIEGUE.md`) | Plan de la Fase 6 |
+
+### Funcionalidad de la spec no implementada (pendiente de decisión del usuario)
+
+- **QR "descarga PNG/PDF listo para imprimir"**: solo se descarga en **SVG** (`src/lib/panel/qr.ts`, `/panel/ajustes`).
+- **Registro opcional post-reserva con magic link**: no existe. El plan de la Fase 3 lo dejó fuera de alcance y no se retomó. `Customer.registered` nunca se pone a `true`.
+- **"El negocio elige preset + color de acento + logo"**: `/panel/ajustes` permite elegir preset y acento, pero **no el logo**. Tampoco hay ninguna pantalla para las fotos del negocio (`Business.imageUrls`) ni para las fotos de los empleados (`Employee.photoUrl`). La página pública las muestra, pero hoy solo se rellenan por seed o por SQL.
+- **`Customer.marketingConsent`**: existe en el modelo, pero no se recoge ni se usa (ver `LANZAMIENTO.md` §1.1).

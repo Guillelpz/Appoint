@@ -33,3 +33,14 @@ describe('assertDestinoLocal', () => {
     );
   });
 });
+
+describe('assertDestinoLocal con motivo propio', () => {
+  it('usa el motivo indicado en vez del texto de los tests', () => {
+    expect(() =>
+      assertDestinoLocal('DATABASE_URL', 'https://abcdefgh.supabase.co', 'El seed crea cuentas demo.')
+    ).toThrowError(/El seed crea cuentas demo\./);
+    expect(() =>
+      assertDestinoLocal('DATABASE_URL', 'https://abcdefgh.supabase.co', 'El seed crea cuentas demo.')
+    ).not.toThrowError(/Los tests truncan/);
+  });
+});
