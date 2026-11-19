@@ -1,6 +1,6 @@
 # Guía de pruebas manuales — de "funciona" a "listo para clientes"
 
-**Creada:** 2026-11-19 · **Entorno:** producción (`https://<tu-app>.vercel.app`) · **Ronda en curso:** 1
+**Creada:** 2026-11-19 · **Negocio B confirmado:** Salón Aura · **Entorno:** producción (`https://<tu-app>.vercel.app`) · **Ronda en curso:** 1
 
 Objetivo: recorrer la app como lo harán una dueña de peluquería y sus clientas,
 **subiendo el volumen de datos día a día**, para cazar bugs y mejoras. Ciclo:
@@ -97,11 +97,19 @@ Mientras existan, cualquiera puede entrar en `/admin`. Antes de meter datos:
 
 ### 4.2 Negocio A — "Peluquería Pruebas"
 
-- [ ] P0.4 En `/admin/negocios`, da de alta **"Peluquería Pruebas"** (slug
-      `pruebas`, tipo peluquería). Como email del dueño usa **el email de tu
-      cuenta de Resend** (el único al que llegan los emails). Si ese email ya es
-      el de tu super-admin y el alta falla, para y avisa: hay que decidir otra
-      vía.
+- [ ] P0.4a **Averigua el email de tu cuenta de Resend:** es con el que te
+      registraste en resend.com (lo ves en Resend → Settings → Team, o en el
+      correo de bienvenida de Resend). Compáralo con el de tu super-admin (el
+      que usas en `/admin/login`).
+- [ ] P0.4b En `/admin/negocios`, da de alta **"Peluquería Pruebas"** (slug
+      `pruebas`, tipo peluquería):
+      - **Si los dos emails son distintos:** pon como email del dueño el de
+        Resend. Te llegará la invitación → sigue con P0.5.
+      - **Si son el mismo** (o el alta falla): pon un email inventado
+        (`dueno@pruebas.example`). La invitación no llegará; pídeme el SQL para
+        fijarle la contraseña desde el editor SQL de Supabase y salta P0.5.
+        Ojo: en ese caso, las pruebas de email (P1.3, P1.7, P2.8…) se hacen
+        con **tu email como clienta**, no como dueña, así que no cambia nada.
 - [ ] P0.5 Abre el email de invitación, fija la contraseña y entra en `/panel`.
 - [ ] P0.6 **Ajustes:** dirección, teléfono, política de cancelación (un texto
       de dos líneas), tema por defecto, ventana 30 días, antelación 60 min,
