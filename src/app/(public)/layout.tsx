@@ -1,30 +1,40 @@
 import type { ReactNode } from 'react';
-import { Playfair_Display, Lora, Poppins, Inter, Work_Sans } from 'next/font/google';
+import localFont from 'next/font/local';
 
-const playfairDisplay = Playfair_Display({
+// Fuentes autoalojadas (src/fonts/, ver su README): next/font/google de Next
+// 15.5.x revienta el build cuando Google devuelve URLs sin extensión
+// (/l/font?kit=...), cosa que hace de forma intermitente. Mismas familias,
+// pesos y subset (latin) que antes; los archivos de un rango de pesos son
+// fuentes variables.
+const playfairDisplay = localFont({
   variable: '--font-playfair',
-  subsets: ['latin'],
-  weight: ['600', '700'],
+  src: [{ path: '../../fonts/playfair-display-latin-600-700.woff2', weight: '600 700', style: 'normal' }],
+  display: 'swap',
+  adjustFontFallback: 'Times New Roman',
 });
-const lora = Lora({
+const lora = localFont({
   variable: '--font-lora',
-  subsets: ['latin'],
-  weight: ['400', '500'],
+  src: [{ path: '../../fonts/lora-latin-400-500.woff2', weight: '400 500', style: 'normal' }],
+  display: 'swap',
+  adjustFontFallback: 'Times New Roman',
 });
-const poppins = Poppins({
+const poppins = localFont({
   variable: '--font-poppins',
-  subsets: ['latin'],
-  weight: ['500', '700'],
+  src: [
+    { path: '../../fonts/poppins-latin-500.woff2', weight: '500', style: 'normal' },
+    { path: '../../fonts/poppins-latin-700.woff2', weight: '700', style: 'normal' },
+  ],
+  display: 'swap',
 });
-const inter = Inter({
+const inter = localFont({
   variable: '--font-inter',
-  subsets: ['latin'],
-  weight: ['400', '500'],
+  src: [{ path: '../../fonts/inter-latin-400-500.woff2', weight: '400 500', style: 'normal' }],
+  display: 'swap',
 });
-const workSans = Work_Sans({
+const workSans = localFont({
   variable: '--font-work-sans',
-  subsets: ['latin'],
-  weight: ['400', '600'],
+  src: [{ path: '../../fonts/work-sans-latin-400-600.woff2', weight: '400 600', style: 'normal' }],
+  display: 'swap',
 });
 
 const PUBLIC_FONT_VARIABLES = [
